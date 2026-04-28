@@ -1,17 +1,30 @@
 Package: asp26boost
 Type: Package
-Title: What the Package Does (Title Case)
+Title: Gradient Boosting
 Version: 0.1.0
 Authors@R: c(
     person(
-      "Jane", "Doe",
+      "Bjarne", "Herbst",
       email = "jane@example.com",
-      role = c("aut", "cre")
+      role = c("aut", "cph", "cre")
+    ),
+    person(
+      "Benedict", "Schnitzler",
+      email = "jane@example.com",
+      role = c("aut", "cph")
+    ),
+    person(
+      "Luca", "Messerschmidt",
+      email = "j.messerschmidt03@stud.uni-goettingen.de",
+      role = c("aut", "cph")
     )
   )
 Description: More about what it does (maybe more than one line).
     Continuation lines should be indented.
-License: What license is it under?
+License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.3.3
+Suggests: 
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
