@@ -1,6 +1,6 @@
 # MIT License
 
-Copyright (c) 2026 Bjarne Herbst, Benedict Schnitzler, and Luca Messerschmidt
+Copyright (c) 2026 asp26boost authors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
