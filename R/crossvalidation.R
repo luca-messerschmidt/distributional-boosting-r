@@ -45,12 +45,18 @@ cv_boost_gaussian <- function(x, y, k = 5, mstop = 100, nu = 0.1){
   mean_error_cv <- colMeans(cv_errors)
   optimal_stop <- which.min(mean_error_cv)
 
+  final_model <- boost_gaussian(x, y, mstop = optimal_stop, nu = nu)
+
+  final_residuals <- y - final_model$fitted_values
+
   result <- list(
     optimal_stop = optimal_stop,
     mean_error_cv = mean_error_cv,
     cv_error_matrix = cv_errors,
     mstop_max = mstop,
-    nu = nu
+    call = match.call(),
+    model = final_model,
+    residuals = final_residuals
   )
 
   class(result) <- "cv_boost_gaussian"
@@ -74,12 +80,77 @@ plot.cv_boost_gaussian <- function(x, ...){
        main = "Hyperparameter Tuning of mstop")
   abline(v = x$optimal_stop, col = "red", lty = 2)
   legend("topright",
-         legend = (c("CV Error",paste("Optimal mstop:", x$optimal_stop))),
+         legend = c("CV Error",paste("Optimal mstop:", x$optimal_stop)),
          col = c("blue", "red"),
          lty = 1:2)
 }
 
 
+#' print-method for CV Function "cv_boost_gaussian"
+#'
+#' @param x object of class "cv_boost_gaussian"
+#' @param ... other parameters for the print() function
+#'
+#' @export
+print.cv_boost_gaussian <- function(x, ...){
+  cat("\nCall:\n", paste(deparse(x$call), sep = "\n", collapse = "\n"),
+      "\n\n", sep = "")
 
+  cat("Optimal mstop:", x$optimal_stop, "\n")
+  cat("Selected variables in new model:\n")
+  print(unique(x$model$selected_variables))
+  invisible(x)
+}
 
+#' summary-method for CV Function "cv_boost_gaussian"
+#'
+#' @param object of class "cv_boost_gaussian"
+#' @param ... other parameters for the summary() function
+#'
+#' @returns list of values for model summary
+#' @export
+summary.cv_boost_gaussian <- function(object, ...){
+
+  res <- list(
+    call = object$call,
+    optimal_stop = object$optimal_stop,
+    coefficients = object$model$coefficients,
+    selected_variables = object$model$selected_variables,
+    residual_summary = summary(object$residuals)
+  )
+
+  class(res) <- "summary.cv_boost_gaussian"
+  return(res)
+}
+
+#' extra print-method for summary-method of "cv_boost_gaussian"
+#'
+#' @param x object of class "summary.cv_boost_gaussian"
+#' @param ... other parameters passed
+#'
+#' @export
+print.summary.cv_boost_gaussian <- function(x, ...){
+  cat("Model Summary:\n")
+  cat("Residuals:\n")
+  print(x$residual_summary)
+  cat("\nCoefficients:\n")
+  print(x$coefficients)
+}
+
+#' predict-method for CV Function "cv_boost_gaussian"
+#'
+#' @param object object of class "cv_boost_gaussian"
+#' @param newdata new data for the prediction
+#' @param ... further parameters for the prediction
+#'
+#' @importFrom stats predict
+#' @returns numeric prediction-vector
+#' @export
+predict.cv_boost_gaussian <- function(object, newdata, ...){
+  if(missing(newdata)){
+    return(object$model$fitted_values)
+  }
+
+  return(predict(object$model, newdata = newdata, ...))
+}
 
