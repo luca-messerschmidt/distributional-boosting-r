@@ -1,4 +1,3 @@
-
 #' k-fold Cross-validation for Hyperparameter Tuning for Boosting Algorithm
 #'
 #' @param x Datamatrix or Dataframe
@@ -19,7 +18,7 @@ cv_boost_gaussian <- function(x, y, k = 5, mstop = 100, nu = 0.1, seed = NULL){
   }
 
   # create random folds
-  folds <- sample(rep(1:k, length.out = n))
+  folds <- generate_folds(n, k, seed = seed)
 
   # create error matrix
   cv_errors <- matrix(0, nrow = k, ncol = mstop)
@@ -63,6 +62,44 @@ cv_boost_gaussian <- function(x, y, k = 5, mstop = 100, nu = 0.1, seed = NULL){
 
   class(result) <- "cv_boost_gaussian"
   return(result)
+}
+
+
+#' CV with Parameter Grid
+#'
+#' @param x Data in matrix or dataframe format
+#' @param y numeric response vector
+#' @param k number of folds
+#' @param mstop_grid vector of mstop-values
+#' @param nu_grid vector of nu-values
+#' @param seed optional seed
+#'
+#' @returns object with best parameters
+#' @export
+#'
+#' @examples
+cv_boost_grid <- function(x, y, k = 5, mstop_grid = c(50, 100, 200),
+                          nu_grid = c(0.01, 0.1, 0.3), seed = NULL){
+  results <- expand.grid(mstop = mstop_grid, nu = nu_grid)
+  results$cv_error <- NA
+
+  for (i in 1:nrow(results)){
+    cv_fit <- cv_boost_gaussian(x, y, k = k,
+                                mstop = results$mstop[i],
+                                nu = results$nu[i],
+                                seed = seed)
+    results$cv_error[i] <-min(cv_fit$mean_error_cv)
+  }
+
+  best_combination <- which.min(results$error_cv)
+
+  final_model <- boost_gaussian(x, y,
+                                mstop = results$mstop[best_combination],
+                                nu = results$nu[best_combination])
+
+  list(best_combination = results[best_combination,],
+       all_results = results,
+       final_model = final_model)
 }
 
 
