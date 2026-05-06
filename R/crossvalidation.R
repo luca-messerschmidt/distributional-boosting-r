@@ -10,11 +10,13 @@
 #' @returns object of class "cv_boost_gaussian"
 #' @export
 
-cv_boost_gaussian <- function(x, y, k = 5, mstop = 100, nu = 0.1){
+cv_boost_gaussian <- function(x, y, k = 5, mstop = 100, nu = 0.1, seed = NULL){
   n <- length(y)
 
-  # set a seed for reproducibility
-  set.seed(42)
+  # set a seed if provided
+  if (!is.null(seed)) {
+    set.seed(seed)
+  }
 
   # create random folds
   folds <- sample(rep(1:k, length.out = n))
