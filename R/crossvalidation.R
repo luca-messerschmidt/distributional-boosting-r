@@ -10,7 +10,10 @@
 #' @export
 
 cv_boost_gaussian <- function(x, y, k = 5, mstop = 100, nu = 0.1, seed = NULL){
+  # check input dimensions
   n <- length(y)
+  if (k < 1){stop("k must be greater than 1")}
+  if (k > n){stop("k must be smaller than sample size n")}
 
   # set a seed if provided
   if (!is.null(seed)) {
