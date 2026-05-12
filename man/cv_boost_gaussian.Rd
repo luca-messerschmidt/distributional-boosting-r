@@ -4,7 +4,7 @@
 \alias{cv_boost_gaussian}
 \title{k-fold Cross-validation for Hyperparameter Tuning for Boosting Algorithm}
 \usage{
-cv_boost_gaussian(x, y, k = 5, mstop = 100, nu = 0.1)
+cv_boost_gaussian(x, y, k = 5, mstop = 100, nu = 0.1, seed = NULL)
 }
 \arguments{
 \item{x}{Datamatrix or Dataframe}
