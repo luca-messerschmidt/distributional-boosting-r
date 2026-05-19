@@ -5,6 +5,7 @@
 #' @param k number of folds
 #' @param mstop limit to iterations
 #' @param nu learning rate for boosting
+#' @param seed random seed for reproducibility
 #'
 #' @returns object of class "cv_boost_gaussian"
 #' @export
@@ -28,9 +29,9 @@ cv_boost_gaussian <- function(x, y, k = 5, mstop = 100, nu = 0.1, seed = NULL){
 
   for (i in 1:k) {
     # split into train and test
-    train_x <- x[folds != i, drop = F]
+    train_x <- x[folds != i, , drop = FALSE]
     train_y <- y[folds != i]
-    test_x <- x[folds == i, drop = F]
+    test_x <- x[folds == i, , drop = FALSE]
     test_y <- y[folds == i]
 
     fit <- boost_gaussian(train_x, train_y, mstop = mstop, nu = nu)
@@ -80,7 +81,6 @@ cv_boost_gaussian <- function(x, y, k = 5, mstop = 100, nu = 0.1, seed = NULL){
 #' @returns object with best parameters
 #' @export
 #'
-#' @examples
 cv_boost_grid <- function(x, y, k = 5, mstop_grid = c(50, 100, 200),
                           nu_grid = c(0.01, 0.1, 0.3), seed = NULL){
   results <- expand.grid(mstop = mstop_grid, nu = nu_grid)
