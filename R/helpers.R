@@ -10,5 +10,5 @@ generate_folds <- function(n, k, seed = NULL){
     set.seed(seed)
   }
 
-  sample(rep(1:k), length.out = n)
+  sample(rep(1:k, length.out = n))
 }
