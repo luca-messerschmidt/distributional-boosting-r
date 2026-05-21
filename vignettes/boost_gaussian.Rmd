@@ -1,0 +1,227 @@
+---
+title: "Gaussian Component-wise Boosting"
+output: 
+  rmarkdown::pdf_document:
+  highlight: kate
+vignette: >
+  %\VignetteIndexEntry{Gaussian Component-wise Boosting}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+header-includes:
+  - \usepackage{xcolor}
+  - \usepackage{fvextra}
+  - \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
+author:
+  Luca Messerschmidt
+  Bjarne Herbst
+  Benedict B. Schnitzler
+date: "2026-05-21"
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = ""
+)
+options(max.print = 100)
+```
+
+# Overview
+
+TODO: add citation
+
+This vignette introduces the basic workflow for fitting Gaussian component-wise
+boosting models using **asp26boost**.
+
+Boosting is a stage-wise optimization procedure that combines many simple model
+updates into a flexible prediction model. From a statistical perspective,
+boosting can be viewed as an iterative empirical risk minimization algorithm.
+Starting from an initial estimate, the model is repeatedly improved by fitting
+simple base learners to the current residual information and updating only the
+best-performing model component at each iteration. Early stopping acts as a form
+of regularization and often leads to sparse models by selecting only a subset of
+available predictors.
+
+For Gaussian response models, component-wise boosting minimizes the squared-error
+loss. Beginning with an intercept-only model, each predictor is fitted
+separately to the current residuals. The predictor yielding the largest
+reduction in residual sum of squares is selected and updated by a shrunken step
+determined by the learning rate. Repeating this procedure yields coefficient
+estimates, variable selection, and regularization simultaneously.
+
+The implementation provided by **asp26boost** follows this component-wise
+boosting framework and offers methods for model fitting, prediction,
+summarization, and visualization.
+
+# Installation
+
+TBD
+TODO, for now only to be functional
+```{r include = FALSE}
+devtools::load_all()
+```
+
+
+
+
+# Simulated Example Data
+
+To illustrate the basic functionality, we generate a synthetic regression
+dataset with a sparse underlying signal.
+
+```{r}
+set.seed(27092001)
+
+n <- 1000  # number of observations
+p <- 10    # number of covariates
+
+X <- matrix(
+  rnorm(n * p),
+  nrow = n,
+  ncol = p
+)
+
+colnames(X) <- paste0("x", seq_len(p))
+
+beta <- c(2, -1.5, 1, rep(0, p - 3))
+
+y <- X %*% beta + rnorm(n)
+
+sample_data <- data.frame(
+  y = as.numeric(y),
+  X
+)
+
+head(sample_data)
+```
+
+The response depends only on the first three predictors. The remaining
+covariates contain noise and are included to illustrate the variable-selection
+behavior of component-wise boosting.
+
+# Model Fitting
+
+Gaussian component-wise boosting models are fitted using `boost_gaussian()`.
+
+```{r}
+fit <- boost_gaussian(
+  x = sample_data[, -1],
+  y = sample_data$y,
+  mstop = 100,
+  nu = 0.1
+)
+```
+
+The most important tuning parameters are:
+
+- `mstop`: number of boosting iterations.
+- `nu`: learning rate controlling the size of each boosting update.
+
+Internally, predictors are standardized before fitting. The model is initialized
+with the mean response and updated iteratively by selecting the predictor that
+provides the largest reduction in squared-error loss.
+
+Printing the fitted object provides a compact overview of the model.
+
+```{r}
+fit
+```
+
+Typical output includes:
+
+- the original model call
+- the tuning parameters specified during the model call
+- The number of predictors, including which were (not) selected
+- basic training-fit statistics
+- the names of the selected variables and selection frequencies
+
+# Model Summary
+
+A more detailed summary can be obtained using `summary()`.
+
+```{r}
+summary(fit)
+```
+
+The summary object contains information on:
+
+- the original model call
+- model dimensions
+- tuning parameters
+- summary of residuals
+- basic training-fit statistics
+- coefficient estimates on the original predictor scale for selected predictors
+- list of non-selected predictors (`coefficient = 0`)
+
+
+
+# Prediction
+
+Predictions can be computed using `predict()`.
+
+```{r}
+predict(fit)
+```
+
+When no additional data are supplied, fitted values for the training sample are
+returned.
+
+Predictions for new observations can be generated via the `newdata` argument.
+
+```{r}
+new_data <- sample_data[1:5, -1]
+
+predict(
+  fit,
+  newdata = new_data
+)
+```
+
+The prediction method also supports evaluating models at earlier boosting
+iterations.
+
+```{r}
+predict(
+  fit,
+  newdata = new_data,
+  mstop = 25
+)
+```
+
+**Note**
+For in-sample early-stopped predictions, the model must have been fitted with
+`keep_path = TRUE`, which is the default when `keep_path` is unspecified.
+
+
+# Model Diagnostics and Visualization
+
+The package provides graphical diagnostics through the `plot()` method.
+
+Coefficient trajectories across boosting iterations can be visualized using the
+path plot.
+
+```{r}
+plot(
+  fit,
+  type = "path"
+)
+```
+
+By default, the most frequently selected variables are displayed. Coefficients
+may be shown either on the original predictor scale or on the standardized
+training scale.
+
+Variable selection frequencies can be inspected using
+
+```{r}
+plot(
+  fit,
+  type = "frequency"
+)
+```
+
+This visualization summarizes how often each predictor was selected during the
+boosting process and provides a simple measure of variable importance.
+
+**Note**
+To use the `plot()`diagnostics the model must be fitted with `keep_path = TRUE`, which is the default.
