@@ -2,12 +2,13 @@
 title: "Gaussian Component-wise Boosting"
 output: 
   rmarkdown::pdf_document:
-  highlight: kate
+    highlight: default
 vignette: >
   %\VignetteIndexEntry{Gaussian Component-wise Boosting}
   %\VignetteEngine{knitr::rmarkdown}
   \usepackage[utf8]{inputenc}
 header-includes:
+  - \renewcommand{\familydefault}{\sfdefault}
   - \usepackage{xcolor}
   - \usepackage{fvextra}
   - \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
@@ -21,7 +22,7 @@ date: "2026-05-21"
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = ""
+  comment = ">"
 )
 options(max.print = 100)
 ```
@@ -108,7 +109,7 @@ fit <- boost_gaussian(
   x = sample_data[, -1],
   y = sample_data$y,
   mstop = 100,
-  nu = 0.1
+  nu = 0.05
 )
 ```
 
@@ -225,3 +226,135 @@ boosting process and provides a simple measure of variable importance.
 
 **Note**
 To use the `plot()`diagnostics the model must be fitted with `keep_path = TRUE`, which is the default.
+
+
+
+# Cross-Validation for Selecting the Stopping Iteration
+
+A key tuning parameter in component-wise boosting is the number of boosting
+iterations, denoted by `mstop`. While increasing the number of iterations
+typically decreases the training error, excessively large values may lead to
+overfitting. Consequently, early stopping serves as the primary regularization
+mechanism in statistical boosting.
+
+TODO: Can be seen with x10 and x8?
+
+
+A common strategy for selecting an appropriate stopping iteration is
+cross-validation. The data are repeatedly split into training and validation
+subsets. Models are fitted on the training folds and evaluated on the
+corresponding validation folds. The value of `mstop` that minimizes the
+estimated out-of-sample prediction error is then selected.
+
+The function `cv_boost_gaussian()` implements k-fold cross-validation for
+Gaussian component-wise boosting models.
+
+```{r}
+K = 5 # Number of folds during cross-validation
+
+cv_fit <- cv_boost_gaussian(
+  x = sample_data[, -1],
+  y = sample_data$y,
+  k = K,
+  mstop = 1000,
+  nu = 0.05,
+  seed = 27092001
+)
+```
+
+The resulting object contains the cross-validation errors for all boosting
+iterations, the selected stopping iteration, and a final model refitted on the
+complete dataset using the optimal value of `mstop`.
+
+# Inspecting Cross-Validation Results
+
+```{r}
+cv_fit
+```
+
+A more detailed summary can be obtained via:
+
+```{r}
+summary(cv_fit)
+```
+
+The summary includes:
+
+TODO
+
+# Visualizing the Cross-Validation Curve
+
+The estimated validation error can be visualized using the plot method.
+
+```{r}
+plot(cv_fit)
+```
+
+The blue curve represents the mean validation error across folds as a function
+of the boosting iteration. The vertical dashed line indicates the selected
+stopping iteration minimizing the estimated prediction error.
+
+This diagnostic plot is useful for assessing whether model performance has
+stabilized and whether the selected value of `mstop` lies in a region of
+relatively low validation error.
+
+# Prediction Using the Cross-Validated Model
+
+Predictions from a cross-validated model can be generated directly via
+`predict()`.
+
+```{r}
+predict(cv_fit)
+```
+
+When no new data are supplied, fitted values from the refitted model are
+returned.
+
+Predictions for new observations can be obtained using:
+
+```{r}
+new_data <- sample_data[1:5, -1]
+
+predict(
+  cv_fit,
+  newdata = new_data
+)
+```
+
+Internally, predictions are delegated to the final boosting model fitted using
+the selected stopping iteration.
+
+# Hyperparameter Grid Search
+
+In some situations, both the stopping iteration `mstop` and the learning rate
+`nu` may be treated as tuning parameters. The function `cv_boost_grid()`
+evaluates combinations of candidate values using repeated cross-validation.
+
+```{r eval=FALSE}
+grid_fit <- cv_boost_grid(
+  x = sample_data[, -1],
+  y = sample_data$y,
+  k = 5,
+  mstop_grid = c(50, 100, 200),
+  nu_grid = c(0.01, 0.1, 0.3),
+  seed = 27092001
+)
+```
+TODO `cv_boost_grid()` funktioniert nicht
+
+
+The returned object contains:
+
+- the best-performing parameter combination,
+- cross-validation results for all evaluated combinations,
+- a final model fitted using the selected hyperparameters.
+
+Grid search can be useful when there is substantial uncertainty regarding the
+appropriate learning rate or when predictive performance is the primary
+objective.
+
+# Concluding Remarks
+
+This vignette introduced the basic workflow for Gaussian component-wise
+boosting, including model fitting, prediction, visualization, and
+cross-validation-based hyperparameter tuning.
