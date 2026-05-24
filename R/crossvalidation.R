@@ -22,7 +22,7 @@ cv_boost_gaussian <- function(x, y, k = 5, mstop = 100, nu = 0.1, seed = NULL){
   }
 
   # create random folds
-  folds <- generate_folds(n, k, seed = seed)
+  folds <- generate_folds(n, k)
 
   # create error matrix
   cv_errors <- matrix(0, nrow = k, ncol = mstop)
@@ -94,7 +94,7 @@ cv_boost_grid <- function(x, y, k = 5, mstop_grid = c(50, 100, 200),
     results$cv_error[i] <-min(cv_fit$mean_error_cv)
   }
 
-  best_combination <- which.min(results$error_cv)
+  best_combination <- which.min(results$cv_error)
 
   final_model <- boost_gaussian(x, y,
                                 mstop = results$mstop[best_combination],
