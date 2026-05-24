@@ -34,19 +34,16 @@ cv_boost_gaussian <- function(x, y, k = 5, mstop = 100, nu = 0.1, seed = NULL){
     test_x <- x[folds == i, , drop = FALSE]
     test_y <- y[folds == i]
 
-    fit <- boost_gaussian(train_x, train_y, mstop = mstop, nu = nu)
-
-    prediction <- rep(fit$initial_value, nrow(test_x))
+    fit <- boost_gaussian(train_x, train_y, mstop = mstop, nu = nu,
+                          keep_path = TRUE)
 
     for (m in 1:mstop){
-      var_m <- fit$selected_variables[m]
-      coef_m <- fit$coefficients[m]
+      prediction <- predict(fit, newdata = test_x, mstop = m)
 
-      prediction <- prediction + coef_m *test_x[[var_m]]
-      # Compute and store the MSE
       cv_errors[i, m] <- mean((test_y - prediction)^2)
       }
   }
+
   mean_error_cv <- colMeans(cv_errors)
   optimal_stop <- which.min(mean_error_cv)
 
@@ -83,6 +80,11 @@ cv_boost_gaussian <- function(x, y, k = 5, mstop = 100, nu = 0.1, seed = NULL){
 #'
 cv_boost_grid <- function(x, y, k = 5, mstop_grid = c(50, 100, 200),
                           nu_grid = c(0.01, 0.1, 0.3), seed = NULL){
+
+  if(!is.null(seed)){
+    set.seed(seed)
+  }
+
   results <- expand.grid(mstop = mstop_grid, nu = nu_grid)
   results$cv_error <- NA
 
@@ -90,7 +92,7 @@ cv_boost_grid <- function(x, y, k = 5, mstop_grid = c(50, 100, 200),
     cv_fit <- cv_boost_gaussian(x, y, k = k,
                                 mstop = results$mstop[i],
                                 nu = results$nu[i],
-                                seed = seed)
+                                seed = NULL)
     results$cv_error[i] <-min(cv_fit$mean_error_cv)
   }
 
