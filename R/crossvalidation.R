@@ -6,23 +6,26 @@
 #' @param mstop limit to iterations
 #' @param nu learning rate for boosting
 #' @param seed random seed for reproducibility
+#' @param folds optional fold vector, if random generation is not wanted
 #'
 #' @returns object of class "cv_boost_gaussian"
 #' @export
 
-cv_boost_gaussian <- function(x, y, k = 5, mstop = 100, nu = 0.1, seed = NULL){
+cv_boost_gaussian <- function(x, y, k = 5, mstop = 100, nu = 0.1, seed = NULL,
+                              folds = NULL){
   # check input dimensions
   n <- length(y)
-  if (k < 1){stop("k must be greater than 1")}
+  if (nrow(x) != n){stop("Number of rows in x must match length of y")}
+  if (k <= 1){stop("k must be greater than 1")}
   if (k > n){stop("k must be smaller than sample size n")}
 
   # set a seed if provided
-  if (!is.null(seed)) {
-    set.seed(seed)
+  if (is.null(folds)){
+    if (!is.null(seed)) set.seed(seed)
+    # create random folds
+    folds <- generate_folds(n, k)
   }
 
-  # create random folds
-  folds <- generate_folds(n, k)
 
   # create error matrix
   cv_errors <- matrix(0, nrow = k, ncol = mstop)
@@ -81,9 +84,9 @@ cv_boost_gaussian <- function(x, y, k = 5, mstop = 100, nu = 0.1, seed = NULL){
 cv_boost_grid <- function(x, y, k = 5, mstop_grid = c(50, 100, 200),
                           nu_grid = c(0.01, 0.1, 0.3), seed = NULL){
 
-  if(!is.null(seed)){
-    set.seed(seed)
-  }
+  if(!is.null(seed)) set.seed(seed)
+  folds <- generate_folds(nrow(x), k)
+
 
   results <- expand.grid(mstop = mstop_grid, nu = nu_grid)
   results$cv_error <- NA
@@ -92,7 +95,7 @@ cv_boost_grid <- function(x, y, k = 5, mstop_grid = c(50, 100, 200),
     cv_fit <- cv_boost_gaussian(x, y, k = k,
                                 mstop = results$mstop[i],
                                 nu = results$nu[i],
-                                seed = NULL)
+                                folds = folds)
     results$cv_error[i] <-min(cv_fit$mean_error_cv)
   }
 
@@ -102,9 +105,12 @@ cv_boost_grid <- function(x, y, k = 5, mstop_grid = c(50, 100, 200),
                                 mstop = results$mstop[best_combination],
                                 nu = results$nu[best_combination])
 
-  list(best_combination = results[best_combination,],
+  result <- list(best_combination = results[best_combination,],
        all_results = results,
        final_model = final_model)
+
+  class(result) <- "cv_boost_grid"
+  return(result)
 }
 
 
@@ -148,7 +154,7 @@ print.cv_boost_gaussian <- function(x, ...){
 
 #' summary-method for CV Function "cv_boost_gaussian"
 #'
-#' @param object of class "cv_boost_gaussian"
+#' @param object An object of class "cv_boost_gaussian"
 #' @param ... other parameters for the summary() function
 #'
 #' @returns list of values for model summary
