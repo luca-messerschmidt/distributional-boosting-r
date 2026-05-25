@@ -48,14 +48,14 @@ test_that("cv_boost_gaussian dimension mismatch", {
   x <- data.frame(x1 = rnorm(10), x2 = rnorm(10))
   y <- rnorm(5)
 
-  expect_error(cv_boost_gaussian(x, y))
+  expect_error(cv_boost_gaussian(x, y), "Number of rows in x must match length of y")
 })
 
 test_that("cv_boost_gaussian invalid number of folds", {
   x <- data.frame(x1 = rnorm(10))
   y <- rnorm(10)
 
-  expect_error(cv_boost_gaussian(x, y, k = 1))
+  expect_error(cv_boost_gaussian(x, y, k = 1), "k must be greater than 1")
   expect_error(cv_boost_gaussian(x, y, k = 11))
 })
 
@@ -69,4 +69,28 @@ test_that("cv_boost_grid risk-minimization test", {
 
   expect_equal(grid_res$final_model$nu, grid_res$best_combination$nu)
   expect_equal(grid_res$final_model$mstop, grid_res$best_combination$mstop)
+})
+
+test_that("cv_boost_grid reproducibility", {
+  set.seed(1)
+  x <- data.frame(x1 = rnorm(30))
+  y <- 2 * x$x1 + rnorm(30)
+
+  res1 <- cv_boost_grid(x, y, k = 2, mstop_grid = c(5, 10),
+                        nu_grid = c(0.1, 0.5), seed = 42)
+  res2 <- cv_boost_grid(x, y, k = 2, mstop_grid = c(5, 10),
+                        nu_grid = c(0.1, 0.5), seed = 42)
+
+  expect_equal(res1$all_results$cv_error, res2$all_results$cv_error)
+})
+
+test_that("cv_boost_grid returns correct class", {
+  set.seed(1)
+  x <- data.frame(x1 = rnorm(30))
+  y <- 2 * x$x1 + rnorm(30)
+
+  res <- cv_boost_grid(x, y, k = 2, mstop_grid = c(5, 10),
+                       nu_grid = c(0.1, 0.5))
+
+  expect_s3_class(res, "cv_boost_grid")
 })
