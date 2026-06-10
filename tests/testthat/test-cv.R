@@ -59,6 +59,18 @@ test_that("cv_boost_gaussian invalid number of folds", {
   expect_error(cv_boost_gaussian(x, y, k = 11))
 })
 
+test_that("cv_boost_grid invalid inputs", {
+  x <- data.frame(x1 = rnorm(20))
+  y <- rnorm(20)
+
+  expect_error(cv_boost_grid(x, y, mstop_grid = numeric(0)))
+  expect_error(cv_boost_grid(x, y, nu_grid = numeric(0)))
+  expect_error(cv_boost_grid(x, y, mstop_grid = c(-1, 10)))
+  expect_error(cv_boost_grid(x, y, nu_grid = c(0, 0.5)))
+  expect_error(cv_boost_grid(x, y, k = 1))
+  expect_error(cv_boost_grid(data.frame(x1 = rnorm(10)), rnorm(5)))
+})
+
 test_that("cv_boost_grid risk-minimization test", {
   set.seed(1)
   x <- data.frame(x1 = rnorm(30))
@@ -94,3 +106,15 @@ test_that("cv_boost_grid returns correct class", {
 
   expect_s3_class(res, "cv_boost_grid")
 })
+
+test_that("cv_boost_gaussian invalid folds", {
+  x <- data.frame(x = rnorm(10))
+  y <- rnorm(10)
+
+  expect_error(cv_boost_gaussian(x, y, k = 2, folds = rep(1, 10)))
+  expect_error(cv_boost_gaussian(x, y, k = 2, folds = 1:9))
+  expect_error(cv_boost_gaussian(x, y, k = 2, folds = c(1:5, rep(3, 5))))
+})
+
+
+
