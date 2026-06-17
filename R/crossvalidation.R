@@ -102,7 +102,6 @@ cv_boost_gaussian <- function(x, y, k = 5, mstop = 100, nu = 0.1, seed = NULL,
 #' @importFrom graphics abline legend
 #'
 #' @export
-#'
 plot.cv_boost_gaussian <- function(x, ...){
   m <- 1:x$mstop_max
   plot(m, x$mean_error_cv, type = "l", col = "blue", lwd = 2,
@@ -161,7 +160,9 @@ summary.cv_boost_gaussian <- function(object, ...){
 #'
 #' @export
 print.summary.cv_boost_gaussian <- function(x, ...){
-  cat("Model Summary:\n")
+  cat("\nCall:\n", paste(deparse(x$call), sep = "\n", collapse = "\n"),
+      "\n\n", sep = "")
+  cat("Optimal mstop:", x$optimal_stop, "\n\n")
   cat("Residuals:\n")
   print(x$residual_summary)
   cat("\nCoefficients:\n")
@@ -189,16 +190,21 @@ predict.cv_boost_gaussian <- function(object, newdata, ...){
 
 #' CV with Parameter Grid
 #'
-#' @param x Data in matrix or dataframe format
+#' @param x data in matrix or dataframe format
 #' @param y numeric response vector
 #' @param k number of folds
 #' @param mstop_grid vector of mstop-values
 #' @param nu_grid vector of nu-values
 #' @param seed optional seed
 #'
-#' @returns object with best parameters
+#' @returns object of class \code{"cv_boost_grid"} containing:
+#' \describe{
+#'    \item{call}{the matched function call}
+#'    \item{best_combination}{data frame row with the best mstop and nu values}
+#'    \item{all_results}{data frame with CV errors for all parameter combinations}
+#'    \item{final_model}{fitted \code{boost_gaussian} model using the best parameters}
+#'}
 #' @export
-#'
 cv_boost_grid <- function(x, y, k = 5, mstop_grid = c(50, 100, 200),
                           nu_grid = c(0.01, 0.1, 0.3), seed = NULL){
 
