@@ -11,7 +11,8 @@ cv_boost_gaussian(
   mstop = 100,
   nu = 0.1,
   seed = NULL,
-  folds = NULL
+  folds = NULL,
+  patience = NULL
 )
 }
 \arguments{
@@ -28,6 +29,8 @@ cv_boost_gaussian(
 \item{seed}{random seed for reproducibility}
 
 \item{folds}{optional fold vector, if random generation is not wanted}
+
+\item{patience}{threshold for early stopping}
 }
 \value{
 object of class "cv_boost_gaussian"

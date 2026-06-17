@@ -14,7 +14,7 @@ cv_boost_grid(
 )
 }
 \arguments{
-\item{x}{Data in matrix or dataframe format}
+\item{x}{data in matrix or dataframe format}
 
 \item{y}{numeric response vector}
 
@@ -27,7 +27,11 @@ cv_boost_grid(
 \item{seed}{optional seed}
 }
 \value{
-object with best parameters
+object of class \code{"cv_boost_grid"} containing:
+   \item{call}{the matched function call}
+   \item{best_combination}{data frame row with the best mstop and nu values}
+   \item{all_results}{data frame with CV errors for all parameter combinations}
+   \item{final_model}{fitted \code{boost_gaussian} model using the best parameters}
 }
 \description{
 CV with Parameter Grid
