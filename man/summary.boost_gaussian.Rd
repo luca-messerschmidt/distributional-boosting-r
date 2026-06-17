@@ -2,7 +2,7 @@
 % Please edit documentation in R/summary_boost_gaussian.R
 \name{summary.boost_gaussian}
 \alias{summary.boost_gaussian}
-\title{Summarize a Gaussian Boosting Model}
+\title{Summarize a Distributional Gaussian Boosting Model}
 \usage{
 \method{summary}{boost_gaussian}(object, ...)
 }
@@ -12,23 +12,33 @@
 \item{...}{Further arguments, currently ignored.}
 }
 \value{
-An object of class \code{"summary.boost_gaussian"}, a list containing
-  the model call, tuning parameters, dimensions, intercept, coefficient
-  summaries, selection frequencies, residual summaries, and RSS path.
+An object of class \code{"summary.boost_gaussian"}.
 }
 \description{
-Computes a structured summary of a fitted \code{boost_gaussian} object.
+Computes a structured summary of a fitted \code{boost_gaussian} object,
+covering both the location (mean) and scale (standard deviation) submodels.
 }
 \details{
-The summary contains model dimensions, tuning parameters, variable selection
-frequencies, residual diagnostics, and coefficient estimates. Coefficients are
-reported on the original predictor scale.
+Both location and scale coefficients are reported on the
+\emph{original predictor scale}:
+\itemize{
+  \item \strong{Location}: a coefficient \eqn{\beta_j} means one unit
+    increase in the original \eqn{x_j} increases \eqn{\hat\mu} by
+    \eqn{\beta_j}.
+  \item \strong{Scale}: a coefficient \eqn{\gamma_j} means one unit
+    increase in the original \eqn{z_j} changes \eqn{\log\hat\sigma} by
+    \eqn{\gamma_j}, i.e. multiplies \eqn{\hat\sigma} by
+    \eqn{\exp(\gamma_j)}.  The linear predictor is always on the
+    \eqn{\log\sigma} scale to ensure \eqn{\hat\sigma > 0}.
+}
+Residual diagnostics are based on the raw residuals \eqn{y - \hat\mu}.
 }
 \examples{
 set.seed(123)
-x <- data.frame(x1 = rnorm(60), x2 = rnorm(60), x3 = rnorm(60))
-y <- 1 + 2 * x$x1 - x$x3 + rnorm(60)
+X <- data.frame(x1 = rnorm(60), x2 = rnorm(60), x3 = rnorm(60))
+Z <- data.frame(z1 = rnorm(60), z2 = rnorm(60))
+y <- 1 + 2 * X$x1 - X$x3 + exp(0.4 * Z$z1) * rnorm(60)
 
-fit <- boost_gaussian(x, y, mstop = 50)
+fit <- boost_gaussian(X, Z, y, mstop = 50)
 summary(fit)
 }

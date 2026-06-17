@@ -2,11 +2,12 @@
 % Please edit documentation in R/plot_boost_gaussian.R
 \name{plot.boost_gaussian}
 \alias{plot.boost_gaussian}
-\title{Plot a Gaussian Boosting Model}
+\title{Plot a Distributional Gaussian Boosting Model}
 \usage{
 \method{plot}{boost_gaussian}(
   x,
   type = c("path", "frequency"),
+  submodel = c("mu", "sigma"),
   top_n = 8,
   scale = c("original", "standardized"),
   ...
@@ -15,15 +16,21 @@
 \arguments{
 \item{x}{A fitted object of class \code{"boost_gaussian"}.}
 
-\item{type}{Plot type. Use \code{"path"} for coefficient paths or
+\item{type}{Plot type: \code{"path"} for cumulative coefficient paths or
 \code{"frequency"} for variable selection frequencies.}
+
+\item{submodel}{Which submodel to plot: \code{"mu"} (location, default) or
+\code{"sigma"} (scale).}
 
 \item{top_n}{Maximum number of variables shown in the coefficient path plot.
 Variables are chosen by selection frequency.}
 
-\item{scale}{Coefficient scale for \code{type = "path"}. Use
-\code{"original"} for original-scale coefficients or \code{"standardized"}
-for coefficients on the standardized training scale.}
+\item{scale}{Coefficient scale for \code{type = "path"}.
+\code{"original"} (default) shows coefficients on the original predictor
+scale for both submodels.  For the scale submodel \code{"original"} means
+the additive effect on \eqn{\log\sigma} per unit change in the original
+\eqn{z_j}.  \code{"standardized"} shows coefficients on the standardised
+predictor scale.}
 
 \item{...}{Additional graphical arguments passed to base plotting functions.}
 }
@@ -32,6 +39,7 @@ The input object \code{x}, invisibly.
 }
 \description{
 Produces diagnostic plots for a fitted \code{boost_gaussian} object.
+Both the location and the scale submodel can be visualised.
 }
 \details{
 The path plot shows cumulative coefficient updates over boosting iterations.
@@ -39,11 +47,14 @@ The frequency plot shows how often each predictor was selected.
 }
 \examples{
 set.seed(123)
-x <- data.frame(x1 = rnorm(80), x2 = rnorm(80), x3 = rnorm(80))
-y <- 1 + 2 * x$x1 - x$x3 + rnorm(80)
+X <- data.frame(x1 = rnorm(80), x2 = rnorm(80), x3 = rnorm(80))
+Z <- data.frame(z1 = rnorm(80), z2 = rnorm(80))
+y <- 1 + 2 * X$x1 - X$x3 + exp(0.4 * Z$z1) * rnorm(80)
 
-fit <- boost_gaussian(x, y, mstop = 80)
+fit <- boost_gaussian(X, Z, y, mstop = 80)
 
-plot(fit, type = "path")
-plot(fit, type = "frequency")
+plot(fit, type = "path",      submodel = "mu")
+plot(fit, type = "frequency", submodel = "mu")
+plot(fit, type = "path",      submodel = "sigma")
+plot(fit, type = "frequency", submodel = "sigma")
 }
