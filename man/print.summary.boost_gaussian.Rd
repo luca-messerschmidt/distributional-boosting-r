@@ -2,7 +2,7 @@
 % Please edit documentation in R/summary_boost_gaussian.R
 \name{print.summary.boost_gaussian}
 \alias{print.summary.boost_gaussian}
-\title{Print a Gaussian Boosting Model Summary}
+\title{Print a Distributional Gaussian Boosting Model Summary}
 \usage{
 \method{print}{summary.boost_gaussian}(x, digits = 4, ...)
 }
@@ -21,9 +21,10 @@ Prints a formatted summary produced by \code{\link{summary.boost_gaussian}}.
 }
 \examples{
 set.seed(123)
-x <- data.frame(x1 = rnorm(60), x2 = rnorm(60), x3 = rnorm(60))
-y <- 1 + 2 * x$x1 - x$x3 + rnorm(60)
+X <- data.frame(x1 = rnorm(60), x2 = rnorm(60), x3 = rnorm(60))
+Z <- data.frame(z1 = rnorm(60), z2 = rnorm(60))
+y <- 1 + 2 * X$x1 - X$x3 + exp(0.4 * Z$z1) * rnorm(60)
 
-fit <- boost_gaussian(x, y, mstop = 50)
+fit <- boost_gaussian(X, Z, y, mstop = 50)
 print(summary(fit))
 }

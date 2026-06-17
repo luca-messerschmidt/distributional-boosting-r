@@ -2,31 +2,78 @@
 % Please edit documentation in R/predict_boost_gaussian.R
 \name{predict.boost_gaussian}
 \alias{predict.boost_gaussian}
-\title{Predict Method for Gaussian Gradient Boosting}
+\title{Predict from a Distributional Gaussian Boosting Model}
 \usage{
-\method{predict}{boost_gaussian}(object, newdata, ...)
+\method{predict}{boost_gaussian}(
+  object,
+  newdata_X = NULL,
+  newdata_Z = NULL,
+  mstop = NULL,
+  what = c("mu", "sigma", "both"),
+  ...
+)
 }
 \arguments{
-\item{object}{A fitted boost_gaussian object.}
+\item{object}{A fitted object of class \code{"boost_gaussian"}.}
 
-\item{newdata}{A data frame or matrix of new predictor values.}
+\item{newdata_X}{Optional data frame or matrix of location predictors.
+Must contain all columns used in \code{X} at fit time, matched by name.
+If omitted, in-sample fitted values are returned.}
+
+\item{newdata_Z}{Optional data frame or matrix of scale predictors.
+Must contain all columns used in \code{Z} at fit time, matched by name.
+If omitted, in-sample fitted values are returned.}
+
+\item{mstop}{Optional non-negative integer: number of boosting iterations
+to use. Defaults to the full fitted model. \code{mstop = 0} returns the
+intercept-only predictions. Any value in \code{0:object$mstop} is allowed,
+so predictions can be obtained at an earlier stopping iteration both
+in-sample and out-of-sample.}
+
+\item{what}{Character string specifying what to return:
+\code{"mu"} (default) for location predictions,
+\code{"sigma"} for scale predictions (on the original sigma scale), or
+\code{"both"} for a data frame with columns \code{mu} and \code{sigma}.}
 
 \item{...}{Further arguments, currently ignored.}
 }
 \value{
-A numeric vector of predictions.
+A numeric vector (for \code{what = "mu"} or \code{"sigma"}) or a
+  data frame with columns \code{mu} and \code{sigma}
+  (for \code{what = "both"}).
 }
 \description{
-Predicts values from a fitted Gaussian boosting model.
+Computes fitted or predicted values from a \code{boost_gaussian} object.
+Both the location (\eqn{\hat\mu}) and the scale (\eqn{\hat\sigma}) can be
+returned.
+}
+\details{
+Predictions are reconstructed by accumulating the stored per-iteration
+updates (intercept plus slope) on the standardised predictor scale.  For
+out-of-sample data the supplied \code{newdata_X} / \code{newdata_Z} are
+standardised with the training means and standard deviations; for in-sample
+prediction the stored standardised training design is used.  Scale
+predictions are returned on the original \eqn{\sigma} scale (i.e. \code{exp}
+of the linear predictor on the log scale).
 }
 \examples{
 set.seed(123)
-x <- data.frame(
-  x1 = rnorm(100),
-  x2 = rnorm(100)
-)
-y <- 1 + 2 * x$x1 + rnorm(100)
+X <- data.frame(x1 = rnorm(50), x2 = rnorm(50))
+Z <- data.frame(z1 = rnorm(50))
+y <- 1 + 2 * X$x1 + exp(0.3 * Z$z1) * rnorm(50)
 
-fit <- boost_gaussian(x, y)
-predict(fit, x)
+fit <- boost_gaussian(X, Z, y, mstop = 50)
+
+# In-sample predictions (full model)
+predict(fit)
+predict(fit, what = "sigma")
+predict(fit, what = "both")
+
+# Early stopping via mstop, in-sample and out-of-sample
+predict(fit, mstop = 10)
+predict(fit, newdata_X = X[1:3, ], newdata_Z = Z[1:3, , drop = FALSE])
+predict(fit, newdata_X = X[1:3, ], newdata_Z = Z[1:3, , drop = FALSE],
+        mstop = 10)
+predict(fit, newdata_X = X[1:3, ], newdata_Z = Z[1:3, , drop = FALSE],
+        what = "both")
 }

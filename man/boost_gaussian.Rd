@@ -2,33 +2,79 @@
 % Please edit documentation in R/boost_gaussian.R
 \name{boost_gaussian}
 \alias{boost_gaussian}
-\title{Gaussian Gradient Boosting}
+\title{Distributional Gaussian Gradient Boosting}
 \usage{
-boost_gaussian(x, y, mstop = 100, nu = 0.1)
+boost_gaussian(X, Z, y, mstop = 100, nu_mu = 0.1, nu_sigma = 0.1)
 }
 \arguments{
-\item{x}{A data frame or matrix of predictors.}
+\item{X}{A data frame or matrix of predictors for the location (mean) model.}
+
+\item{Z}{A data frame or matrix of predictors for the scale (log-sd) model.}
 
 \item{y}{A numeric response vector.}
 
-\item{mstop}{Number of boosting iterations.}
+\item{mstop}{Number of boosting iterations (each iteration updates both
+the location and the scale submodel once).}
 
-\item{nu}{Learning rate.}
+\item{nu_mu}{Learning rate for the location submodel.}
+
+\item{nu_sigma}{Learning rate for the scale submodel.}
 }
 \value{
-A list containing the fitted model.
+A list of class \code{"boost_gaussian"} containing fitted values,
+  coefficient paths, centering/scaling constants, and diagnostics for both
+  the location and scale submodels.
 }
 \description{
-Fits a simple component-wise gradient boosting model for Gaussian responses.
+Fits a component-wise gradient boosting model for Gaussian responses,
+jointly estimating the location (mean) and scale (standard deviation) via
+cyclic updates on two separate design matrices.
+}
+\details{
+This implements component-wise gradient boosting for a Gaussian
+location-scale model (in the spirit of \code{gamboostLSS}).  The two
+distribution parameters are updated cyclically, one base learner at a time:
+\enumerate{
+  \item \strong{Location step} – the negative gradient of the Gaussian
+    log-likelihood w.r.t. \eqn{\mu} is
+    \eqn{u_\mu = (y - \mu) / \sigma^2}.
+    Each column of \code{X} is fit by a simple linear base learner
+    (\code{lm(u_mu ~ x_j)}, with intercept); the column with the lowest
+    residual sum of squares is selected and \eqn{\hat\mu} is updated by a
+    small step \code{nu_mu}.
+  \item \strong{Scale step} – the negative gradient w.r.t. \eqn{\log\sigma}
+    is \eqn{u_\sigma = (y - \mu)^2 / \sigma^2 - 1}.  A simple linear base
+    learner is fit to each column of \code{Z} and the best is selected;
+    \eqn{\log\hat\sigma} is updated by a small step \code{nu_sigma}.
+    Working on the log scale keeps \eqn{\hat\sigma > 0} and naturally bounds
+    the step size, so no additional gradient rescaling is needed.
+}
+
+\strong{Predictor standardisation}: both \code{X} and \code{Z} are
+standardised internally (zero mean, unit variance) before fitting so that
+all base learners compete on the same scale.  Stored coefficients are
+converted back to the original predictor scale (see below).
+
+\strong{Base learners include an intercept}: each base learner is a full
+simple linear regression \code{lm(u ~ x_j)}.  The intercept term allows the
+overall level of the linear predictor to be corrected at every step.  This
+matters most for the scale submodel, whose level is initialised at
+\eqn{\log(\mathrm{sd}(y))} and must be free to move toward the correct
+residual scale.
+
+Coefficients for both submodels are stored and reported on the
+\emph{original predictor scale} (not the standardised scale).  For the
+scale submodel the linear predictor is \eqn{\log\sigma}, so a coefficient
+expresses the additive change in \eqn{\log\sigma} per unit change in the
+original predictor (equivalently, a multiplicative factor
+\eqn{\exp(\cdot)} on \eqn{\sigma}).
 }
 \examples{
 set.seed(123)
-x <- data.frame(
-  x1 = rnorm(100),
-  x2 = rnorm(100)
-)
-y <- 2 + 3 * x$x1 + rnorm(100)
+X <- data.frame(x1 = rnorm(100), x2 = rnorm(100))
+Z <- data.frame(z1 = rnorm(100), z2 = rnorm(100))
+y <- 2 + 3 * X$x1 + exp(0.5 * Z$z1) * rnorm(100)
 
-fit <- boost_gaussian(x, y, mstop = 100, nu = 0.1)
-predict(fit, x[1:5, ])
+fit <- boost_gaussian(X, Z, y, mstop = 100, nu_mu = 0.1, nu_sigma = 0.1)
+predict(fit, newdata_X = X[1:5, ], newdata_Z = Z[1:5, ])
 }
