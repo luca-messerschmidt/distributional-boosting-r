@@ -7,7 +7,7 @@
 \method{summary}{cv_boost_gaussian}(object, ...)
 }
 \arguments{
-\item{object}{of class "cv_boost_gaussian"}
+\item{object}{An object of class "cv_boost_gaussian"}
 
 \item{...}{other parameters for the summary() function}
 }

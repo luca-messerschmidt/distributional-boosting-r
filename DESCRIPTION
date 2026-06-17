@@ -19,8 +19,9 @@ Authors@R: c(
       role = c("aut", "cph")
     )
   )
-Description: More about what it does (maybe more than one line).
-    Continuation lines should be indented.
+Description: Implements a simple component-wise gradient boosting algorithm for
+    Gaussian location-scale models with prediction, plotting, printing, and
+    summary methods.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true

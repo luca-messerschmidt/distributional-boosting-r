@@ -2,7 +2,7 @@
 % Please edit documentation in R/print_boost_gaussian.R
 \name{print.boost_gaussian}
 \alias{print.boost_gaussian}
-\title{Print a Gaussian Boosting Model}
+\title{Print a Distributional Gaussian Boosting Model}
 \usage{
 \method{print}{boost_gaussian}(x, digits = 4, ...)
 }
@@ -17,17 +17,16 @@
 The input object \code{x}, invisibly.
 }
 \description{
-Prints a compact summary of a fitted \code{boost_gaussian} object.
-}
-\details{
-The output includes the model call, tuning parameters, predictor selection
-counts, and basic training-fit statistics.
+Prints a compact overview of a fitted \code{boost_gaussian} object,
+including tuning parameters, predictor selection counts for both the
+location and scale submodels, and basic training-fit statistics.
 }
 \examples{
 set.seed(123)
-x <- data.frame(x1 = rnorm(50), x2 = rnorm(50))
-y <- 1 + 2 * x$x1 + rnorm(50)
+X <- data.frame(x1 = rnorm(50), x2 = rnorm(50))
+Z <- data.frame(z1 = rnorm(50))
+y <- 1 + 2 * X$x1 + exp(0.3 * Z$z1) * rnorm(50)
 
-fit <- boost_gaussian(x, y, mstop = 30)
+fit <- boost_gaussian(X, Z, y, mstop = 30)
 print(fit)
 }
