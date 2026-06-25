@@ -4,12 +4,14 @@
 \alias{predict.cv_boost_grid}
 \title{predict-method for CV Function "cv_boost_grid"}
 \usage{
-\method{predict}{cv_boost_grid}(object, newdata, ...)
+\method{predict}{cv_boost_grid}(object, newdata_X = NULL, newdata_Z = NULL, ...)
 }
 \arguments{
 \item{object}{object of class "cv_boost_grid"}
 
-\item{newdata}{new data for the prediction}
+\item{newdata_X}{new location predictor data}
+
+\item{newdata_Z}{new scale predictor data}
 
 \item{...}{further parameters for the prediction}
 }
