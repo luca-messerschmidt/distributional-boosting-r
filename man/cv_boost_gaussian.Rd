@@ -5,18 +5,22 @@
 \title{k-fold Cross-validation for Hyperparameter Tuning for Boosting Algorithm}
 \usage{
 cv_boost_gaussian(
-  x,
+  X,
+  Z,
   y,
   k = 5,
   mstop = 100,
-  nu = 0.1,
+  nu_mu = 0.1,
+  nu_sigma = 0.1,
   seed = NULL,
   folds = NULL,
   patience = NULL
 )
 }
 \arguments{
-\item{x}{Datamatrix or Dataframe}
+\item{X}{data matrix or data frame for location submodel}
+
+\item{Z}{data matrix or data frame for scale submodel}
 
 \item{y}{numeric response-vector}
 
@@ -24,7 +28,9 @@ cv_boost_gaussian(
 
 \item{mstop}{limit to iterations}
 
-\item{nu}{learning rate for boosting}
+\item{nu_mu}{learning rate for location submodel}
+
+\item{nu_sigma}{learning rate for scale submodel}
 
 \item{seed}{random seed for reproducibility}
 
