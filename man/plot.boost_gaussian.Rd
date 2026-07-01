@@ -6,7 +6,7 @@
 \usage{
 \method{plot}{boost_gaussian}(
   x,
-  type = c("path", "frequency"),
+  type = c("path", "frequency", "risk"),
   submodel = c("mu", "sigma"),
   top_n = 8,
   scale = c("original", "standardized"),
@@ -16,8 +16,10 @@
 \arguments{
 \item{x}{A fitted object of class \code{"boost_gaussian"}.}
 
-\item{type}{Plot type: \code{"path"} for cumulative coefficient paths or
-\code{"frequency"} for variable selection frequencies.}
+\item{type}{Plot type: \code{"path"} for cumulative coefficient paths,
+\code{"frequency"} for variable selection frequencies, or \code{"risk"}
+for the in-sample (and, if internal early stopping was used, validation)
+negative log-likelihood trace over boosting rounds.}
 
 \item{submodel}{Which submodel to plot: \code{"mu"} (location, default) or
 \code{"sigma"} (scale).}

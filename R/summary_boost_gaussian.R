@@ -73,7 +73,11 @@ summary.boost_gaussian <- function(object, ...) {
   
   out <- list(
     call                 = object$call,
+    method               = if (is.null(object$method)) "cyclic" else object$method,
     mstop                = object$mstop,
+    mstop_mu             = object$mstop_mu,
+    mstop_sigma          = object$mstop_sigma,
+    early_stopping       = object$early_stopping,
     nu_mu                = object$nu_mu,
     nu_sigma             = object$nu_sigma,
     n                    = object$n,
@@ -139,10 +143,27 @@ print.summary.boost_gaussian <- function(x, digits = 4, ...) {
       x$pZ - length(x$sigma_zero_vars), "selected,",
       length(x$sigma_zero_vars), "zero\n\n")
   
-  cat("Iterations : mstop =", x$mstop,
+  mstop_text <- if (!is.null(x$mstop_mu) && !is.null(x$mstop_sigma) &&
+                    x$mstop_mu != x$mstop_sigma) {
+    sprintf("%d rounds (mstop_mu = %d, mstop_sigma = %d)",
+            x$mstop, x$mstop_mu, x$mstop_sigma)
+  } else {
+    x$mstop
+  }
+
+  cat("Iterations : method =", x$method,
+      " mstop =", mstop_text,
       " nu_mu =", x$nu_mu,
-      " nu_sigma =", x$nu_sigma, "\n\n")
-  
+      " nu_sigma =", x$nu_sigma, "\n")
+
+  if (!is.null(x$early_stopping) && isTRUE(x$early_stopping$used)) {
+    cat("Early stopping: best_round =", x$early_stopping$best_round,
+        " (of", x$early_stopping$mstop_max, "max,",
+        "patience =", x$early_stopping$patience,
+        ", validation_split =", x$early_stopping$validation_split, ")\n")
+  }
+  cat("\n")
+
   # ── Residuals ──────────────────────────────────────────────────────────────
   cat("Residuals (y - mu_hat):\n")
   res_mat <- matrix(
