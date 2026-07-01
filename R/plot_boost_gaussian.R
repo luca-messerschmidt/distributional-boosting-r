@@ -4,8 +4,10 @@
 #' Both the location and the scale submodel can be visualised.
 #'
 #' @param x A fitted object of class \code{"boost_gaussian"}.
-#' @param type Plot type: \code{"path"} for cumulative coefficient paths or
-#'   \code{"frequency"} for variable selection frequencies.
+#' @param type Plot type: \code{"path"} for cumulative coefficient paths,
+#'   \code{"frequency"} for variable selection frequencies, or \code{"risk"}
+#'   for the in-sample (and, if internal early stopping was used, validation)
+#'   negative log-likelihood trace over boosting rounds.
 #' @param submodel Which submodel to plot: \code{"mu"} (location, default) or
 #'   \code{"sigma"} (scale).
 #' @param top_n Maximum number of variables shown in the coefficient path plot.
@@ -41,7 +43,7 @@
 #' plot(fit, type = "frequency", submodel = "sigma")
 
 plot.boost_gaussian <- function(x,
-                                type     = c("path", "frequency"),
+                                type     = c("path", "frequency", "risk"),
                                 submodel = c("mu", "sigma"),
                                 top_n    = 8,
                                 scale    = c("original", "standardized"),
@@ -52,19 +54,21 @@ plot.boost_gaussian <- function(x,
   type     <- match.arg(type)
   submodel <- match.arg(submodel)
   scale    <- match.arg(scale)
-  
+
   if (!is.numeric(top_n) || length(top_n) != 1L || is.na(top_n) ||
       !is.finite(top_n) || top_n < 1L || top_n != as.integer(top_n)) {
     stop("top_n must be a single positive integer.", call. = FALSE)
   }
   top_n <- as.integer(top_n)
-  
+
   if (type == "frequency") {
     .plot_boost_frequency(x, submodel = submodel, ...)
+  } else if (type == "risk") {
+    .plot_boost_risk(x, ...)
   } else {
     .plot_boost_path(x, submodel = submodel, top_n = top_n, scale = scale, ...)
   }
-  
+
   invisible(x)
 }
 
@@ -72,12 +76,13 @@ plot.boost_gaussian <- function(x,
 
 .plot_boost_path <- function(x, submodel = "mu", top_n = 8,
                              scale = "original", ...) {
-  mstop <- x$mstop
-  
+  mstop <- x$mstop   # total rounds executed (x-axis range)
+
   if (submodel == "mu") {
     vars          <- x$X_names
     selected      <- x$selected_mu
     coefs         <- x$coef_mu
+    rounds        <- x$round_mu
     pred_scale    <- x$X_scale   # divide std coef by this to get original scale
     default_title <- "Location Coefficient Path"
     default_ylab  <- if (identical(scale, "original")) {
@@ -89,6 +94,7 @@ plot.boost_gaussian <- function(x,
     vars          <- x$Z_names
     selected      <- x$selected_sigma
     coefs         <- x$coef_sigma
+    rounds        <- x$round_sigma
     pred_scale    <- x$Z_scale   # divide std coef by this to get original scale
     default_title <- "Scale Coefficient Path"
     default_ylab  <- if (identical(scale, "original")) {
@@ -97,23 +103,30 @@ plot.boost_gaussian <- function(x,
       "Coefficient (standardized predictor scale, effect on log-sigma)"
     }
   }
-  
-  p <- length(vars)
-  
-  # Build cumulative path matrix on the STANDARDISED scale first
-  path_std <- matrix(0, nrow = p, ncol = mstop,
-                     dimnames = list(vars, paste0("m", seq_len(mstop))))
-  
-  for (m in seq_len(mstop)) {
+
+  p       <- length(vars)
+  n_steps <- length(selected)
+
+  # Build cumulative path matrix on the STANDARDISED scale first. Columns
+  # correspond to this submodel's own steps (n_steps, not the shared
+  # `mstop`), each tagged with the global round it occurred at (`rounds`) so
+  # the path can be plotted against the shared boosting-iteration axis even
+  # when a submodel was updated less often or irregularly (two-mstop cyclic,
+  # noncyclic).
+  path_std <- matrix(0, nrow = p, ncol = max(n_steps, 1L),
+                     dimnames = list(vars, paste0("m", seq_len(max(n_steps, 1L)))))
+
+  for (m in seq_len(n_steps)) {
     if (m > 1L) path_std[, m] <- path_std[, m - 1L]
     sel              <- selected[m]
     path_std[sel, m] <- path_std[sel, m] + coefs[m]
   }
-  
+
   freq     <- sort(table(selected), decreasing = TRUE)
   sel_vars <- names(freq)[seq_len(min(top_n, length(freq)))]
-  
-  path_plot <- path_std[sel_vars, , drop = FALSE]
+
+  path_plot <- path_std[sel_vars, seq_len(n_steps), drop = FALSE]
+  plot_x    <- rounds
   
   # Convert to original predictor scale if requested (both mu and sigma)
   if (identical(scale, "original")) {
@@ -138,9 +151,9 @@ plot.boost_gaussian <- function(x,
                               "type", "lwd", "col"))]
   
   do.call(graphics::plot, c(list(
-    x    = seq_len(mstop),
+    x    = plot_x,
     y    = path_plot[1L, ],
-    type = "l",
+    type = "s",
     lwd  = line_lwd,
     col  = cols[1L],
     xlim = c(-1, mstop),
@@ -149,13 +162,13 @@ plot.boost_gaussian <- function(x,
     ylab = if (!is.null(dots$ylab)) dots$ylab else default_ylab,
     main = main_title
   ), plot_args))
-  
+
   graphics::grid(nx = NA, ny = NULL, lty = 2, col = "grey85")
   graphics::abline(h = 0, lty = 3, col = "grey70")
-  
+
   if (length(sel_vars) > 1L) {
     for (k in seq_along(sel_vars)[-1L]) {
-      graphics::lines(seq_len(mstop), path_plot[k, ], lwd = line_lwd, col = cols[k])
+      graphics::lines(plot_x, path_plot[k, ], type = "s", lwd = line_lwd, col = cols[k])
     }
   }
   
@@ -174,30 +187,84 @@ plot.boost_gaussian <- function(x,
 # ── Internal: selection frequency bar plot ─────────────────────────────────────
 
 .plot_boost_frequency <- function(x, submodel = "mu", ...) {
-  
+
   if (submodel == "mu") {
     freq          <- sort(table(x$selected_mu), decreasing = TRUE)
+    n_steps       <- length(x$selected_mu)
     default_title <- "Location Variable Selection Frequency"
   } else {
     freq          <- sort(table(x$selected_sigma), decreasing = TRUE)
+    n_steps       <- length(x$selected_sigma)
     default_title <- "Scale Variable Selection Frequency"
   }
-  
+
   dots       <- list(...)
   main_title <- if (!is.null(dots$main)) dots$main else default_title
   bar_args   <- dots[setdiff(names(dots), c("main", "xlab", "ylab"))]
-  
+
   bp <- do.call(graphics::barplot, c(list(
     height    = freq,
     main      = main_title,
     xlab      = if (!is.null(dots$xlab)) dots$xlab else "Predictor",
     ylab      = if (!is.null(dots$ylab)) dots$ylab else
-      paste0("Selection count (total = ", x$mstop, " iterations)"),
+      paste0("Selection count (total = ", n_steps, " updates)"),
     las       = 2,
     cex.names = 0.85
   ), bar_args))
-  
+
   graphics::text(bp, freq + max(freq) * 0.02,
-                 labels = paste0(round(100 * freq / x$mstop, 1), "%"),
+                 labels = paste0(round(100 * freq / n_steps, 1), "%"),
                  cex = 0.75, col = "grey30")
+}
+
+# ── Internal: risk (negative log-likelihood) trace plot ────────────────────────
+
+.plot_boost_risk <- function(x, ...) {
+  if (is.null(x$risk)) {
+    stop("x does not contain a risk trace (fit with an older version of ",
+         "boost_gaussian()?).", call. = FALSE)
+  }
+
+  train_trace  <- c(x$risk0, x$risk)
+  train_rounds <- seq(0L, length(train_trace) - 1L)
+
+  has_val <- !is.null(x$early_stopping) && isTRUE(x$early_stopping$used)
+  if (has_val) {
+    val_trace  <- c(x$early_stopping$val_risk0, x$early_stopping$val_risk)
+    val_rounds <- seq(0L, length(val_trace) - 1L)
+    y_range    <- range(c(train_trace, val_trace), finite = TRUE)
+  } else {
+    y_range <- range(train_trace, finite = TRUE)
+  }
+
+  dots       <- list(...)
+  main_title <- if (!is.null(dots$main)) dots$main else
+    "Boosting Risk (Negative Log-Likelihood)"
+  plot_args  <- dots[setdiff(names(dots),
+                            c("main", "xlab", "ylab", "type", "col", "lwd"))]
+
+  do.call(graphics::plot, c(list(
+    x    = train_rounds,
+    y    = train_trace,
+    type = "l",
+    lwd  = 2,
+    col  = "steelblue",
+    ylim = y_range,
+    xlab = if (!is.null(dots$xlab)) dots$xlab else "Boosting iteration",
+    ylab = if (!is.null(dots$ylab)) dots$ylab else "Negative log-likelihood",
+    main = main_title
+  ), plot_args))
+
+  if (has_val) {
+    graphics::lines(val_rounds, val_trace, lwd = 2, col = "firebrick", lty = 2)
+    graphics::abline(v = x$early_stopping$best_round, lty = 3, col = "grey40")
+    graphics::legend("topright",
+                     legend = c("Training risk", "Validation risk",
+                                paste("best_round =", x$early_stopping$best_round)),
+                     col = c("steelblue", "firebrick", "grey40"),
+                     lty = c(1, 2, 3), lwd = c(2, 2, 1), bty = "n", cex = 0.85)
+  } else {
+    graphics::legend("topright", legend = "Training risk", col = "steelblue",
+                     lty = 1, lwd = 2, bty = "n", cex = 0.85)
+  }
 }

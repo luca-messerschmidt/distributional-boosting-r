@@ -7,15 +7,24 @@
 #' @param object A fitted object of class \code{"boost_gaussian"}.
 #' @param newdata_X Optional data frame or matrix of location predictors.
 #'   Must contain all columns used in \code{X} at fit time, matched by name.
-#'   If omitted, in-sample fitted values are returned.
+#'   If omitted (together with \code{newdata_Z} and \code{newdata}), in-sample
+#'   fitted values are returned.
 #' @param newdata_Z Optional data frame or matrix of scale predictors.
 #'   Must contain all columns used in \code{Z} at fit time, matched by name.
-#'   If omitted, in-sample fitted values are returned.
-#' @param mstop Optional non-negative integer: number of boosting iterations
-#'   to use. Defaults to the full fitted model. \code{mstop = 0} returns the
+#'   If omitted (together with \code{newdata_X} and \code{newdata}), in-sample
+#'   fitted values are returned.
+#' @param newdata Optional single data frame with the original variable
+#'   names, used when \code{object} was fit via the \code{formula} interface
+#'   of \code{\link{boost_gaussian}}. An alternative to supplying
+#'   \code{newdata_X}/\code{newdata_Z} directly.
+#' @param mstop Optional non-negative integer: number of boosting rounds to
+#'   use. Defaults to the full fitted model. \code{mstop = 0} returns the
 #'   intercept-only predictions. Any value in \code{0:object$mstop} is allowed,
-#'   so predictions can be obtained at an earlier stopping iteration both
-#'   in-sample and out-of-sample.
+#'   so predictions can be obtained at an earlier stopping round both
+#'   in-sample and out-of-sample. A "round" counts the same way it did during
+#'   fitting: for \code{method = "cyclic"} each round may update both
+#'   submodels (or only one, once the other's separate budget is exhausted);
+#'   for \code{method = "noncyclic"} each round updates exactly one submodel.
 #' @param what Character string specifying what to return:
 #'   \code{"mu"} (default) for location predictions,
 #'   \code{"sigma"} for scale predictions (on the original sigma scale), or
@@ -62,15 +71,34 @@
 predict.boost_gaussian <- function(object,
                                    newdata_X = NULL,
                                    newdata_Z = NULL,
+                                   newdata   = NULL,
                                    mstop     = NULL,
                                    what      = c("mu", "sigma", "both"),
                                    ...) {
-  
+
   if (!inherits(object, "boost_gaussian")) {
     stop("object must inherit from class 'boost_gaussian'.", call. = FALSE)
   }
-  
+
   what <- match.arg(what)
+
+  # ── Formula-style newdata: rebuild newdata_X / newdata_Z via stored terms ──
+  if (!is.null(newdata)) {
+    if (!is.null(newdata_X) || !is.null(newdata_Z)) {
+      stop("Supply either newdata, or newdata_X/newdata_Z, not both.",
+           call. = FALSE)
+    }
+    if (is.null(object$terms_mu) || is.null(object$terms_sigma)) {
+      stop("newdata can only be used when object was fit via the formula ",
+           "interface of boost_gaussian(); use newdata_X/newdata_Z instead.",
+           call. = FALSE)
+    }
+    newdata_X <- stats::model.matrix(stats::delete.response(object$terms_mu),
+                                     data = newdata)
+    newdata_X <- newdata_X[, colnames(newdata_X) != "(Intercept)", drop = FALSE]
+    newdata_Z <- stats::model.matrix(object$terms_sigma, data = newdata)
+    newdata_Z <- newdata_Z[, colnames(newdata_Z) != "(Intercept)", drop = FALSE]
+  }
   
   # ── Validate mstop ────────────────────────────────────────────────────────
   if (is.null(mstop)) {
@@ -129,15 +157,22 @@ predict.boost_gaussian <- function(object,
   
   # General reconstruction (used for early stopping in- and out-of-sample, and
   # for the full out-of-sample model): accumulate per-step intercept + slope.
+  # k_mu/k_sigma are the number of each submodel's steps that occurred within
+  # the first m_use rounds — equal to m_use itself in the classic single-mstop
+  # cyclic case, but can differ once submodels have separate budgets or the
+  # update schedule is non-cyclic.
+  k_mu    <- sum(object$round_mu    <= m_use)
+  k_sigma <- sum(object$round_sigma <= m_use)
+
   mu_pred <- rep(object$initial_mu, n_pred)
-  for (m in seq_len(m_use)) {
+  for (m in seq_len(k_mu)) {
     mu_pred <- mu_pred +
       object$intercept_step_mu[m] +
       object$coef_mu[m] * x_std[, object$selected_mu[m]]
   }
-  
+
   log_sigma_pred <- rep(object$initial_log_sigma, n_pred)
-  for (m in seq_len(m_use)) {
+  for (m in seq_len(k_sigma)) {
     log_sigma_pred <- log_sigma_pred +
       object$intercept_step_sigma[m] +
       object$coef_sigma[m] * z_std[, object$selected_sigma[m]]

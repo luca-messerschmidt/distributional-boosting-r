@@ -8,6 +8,7 @@
   object,
   newdata_X = NULL,
   newdata_Z = NULL,
+  newdata = NULL,
   mstop = NULL,
   what = c("mu", "sigma", "both"),
   ...
@@ -18,17 +19,27 @@
 
 \item{newdata_X}{Optional data frame or matrix of location predictors.
 Must contain all columns used in \code{X} at fit time, matched by name.
-If omitted, in-sample fitted values are returned.}
+If omitted (together with \code{newdata_Z} and \code{newdata}), in-sample
+fitted values are returned.}
 
 \item{newdata_Z}{Optional data frame or matrix of scale predictors.
 Must contain all columns used in \code{Z} at fit time, matched by name.
-If omitted, in-sample fitted values are returned.}
+If omitted (together with \code{newdata_X} and \code{newdata}), in-sample
+fitted values are returned.}
 
-\item{mstop}{Optional non-negative integer: number of boosting iterations
-to use. Defaults to the full fitted model. \code{mstop = 0} returns the
+\item{newdata}{Optional single data frame with the original variable
+names, used when \code{object} was fit via the \code{formula} interface
+of \code{\link{boost_gaussian}}. An alternative to supplying
+\code{newdata_X}/\code{newdata_Z} directly.}
+
+\item{mstop}{Optional non-negative integer: number of boosting rounds to
+use. Defaults to the full fitted model. \code{mstop = 0} returns the
 intercept-only predictions. Any value in \code{0:object$mstop} is allowed,
-so predictions can be obtained at an earlier stopping iteration both
-in-sample and out-of-sample.}
+so predictions can be obtained at an earlier stopping round both
+in-sample and out-of-sample. A "round" counts the same way it did during
+fitting: for \code{method = "cyclic"} each round may update both
+submodels (or only one, once the other's separate budget is exhausted);
+for \code{method = "noncyclic"} each round updates exactly one submodel.}
 
 \item{what}{Character string specifying what to return:
 \code{"mu"} (default) for location predictions,

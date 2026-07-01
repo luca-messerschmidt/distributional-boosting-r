@@ -31,10 +31,30 @@ print.boost_gaussian <- function(x, digits = 4, ...) {
   cat(rep("-", 45), "\n", sep = "")
   cat("Call:\n  ", deparse(x$call), "\n\n", sep = "")
   
+  method_label <- if (is.null(x$method)) "cyclic" else x$method
+
   cat("Tuning parameters:\n")
-  cat("  mstop    :", x$mstop, "\n")
-  cat("  nu_mu    :", x$nu_mu, "\n")
-  cat("  nu_sigma :", x$nu_sigma, "\n\n")
+  cat("  method        :", method_label, "\n")
+  if (!is.null(x$mstop_mu) && !is.null(x$mstop_sigma) &&
+      x$mstop_mu != x$mstop_sigma) {
+    cat("  mstop         :", x$mstop, "rounds  (mstop_mu =", x$mstop_mu,
+        ", mstop_sigma =", x$mstop_sigma, ")\n")
+  } else {
+    cat("  mstop         :", x$mstop, "\n")
+  }
+  cat("  nu_mu         :", x$nu_mu, "\n")
+  cat("  nu_sigma      :", x$nu_sigma, "\n")
+
+  if (!is.null(x$early_stopping) && isTRUE(x$early_stopping$used)) {
+    cat("\nInternal early stopping:\n")
+    cat("  best_round       :", x$early_stopping$best_round,
+        "(searched up to", x$early_stopping$mstop_max, "rounds)\n")
+    cat("  patience         :", x$early_stopping$patience, "\n")
+    cat("  validation_split :", x$early_stopping$validation_split,
+        " (n_train =", x$early_stopping$n_train,
+        ", n_val =", x$early_stopping$n_val, ")\n")
+  }
+  cat("\n")
   
   # ── Location submodel ──────────────────────────────────────────────────────
   freq_mu    <- sort(table(x$selected_mu), decreasing = TRUE)
