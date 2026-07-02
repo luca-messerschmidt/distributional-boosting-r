@@ -9,9 +9,10 @@ cv_boost_grid(
   Z,
   y,
   k = 5,
-  mstop_grid = c(50, 100, 200),
+  mstop_grid = 200,
   nu_mu_grid = c(0.01, 0.1, 0.3),
   nu_sigma_grid = c(0.01, 0.1, 0.3),
+  method = "cyclic",
   seed = NULL
 )
 }
@@ -29,6 +30,8 @@ cv_boost_grid(
 \item{nu_mu_grid}{vector of nu-values for the location submodel}
 
 \item{nu_sigma_grid}{vector of nu-values for the scale submodel}
+
+\item{method}{boosting update rule ("cyclic", "noncyclic")}
 
 \item{seed}{optional seed}
 }
