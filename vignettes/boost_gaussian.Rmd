@@ -29,7 +29,6 @@ options(max.print = 100)
 
 # Overview
 
-TODO: add citation
 
 This vignette introduces the basic workflow for fitting Gaussian component-wise
 boosting models using **asp26boost**.
@@ -43,12 +42,13 @@ best-performing model component at each iteration. Early stopping acts as a form
 of regularization and often leads to sparse models by selecting only a subset of
 available predictors.
 
-For Gaussian response models, component-wise boosting minimizes the squared-error
-loss. Beginning with an intercept-only model, each predictor is fitted
+For Gaussian response models, component-wise boosting minimizes the negative log-likelihood. Beginning with an intercept-only model, each predictor is fitted
 separately to the current residuals. The predictor yielding the largest
-reduction in residual sum of squares is selected and updated by a shrunken step
+reduction is selected and updated by a shrunken step
 determined by the learning rate. Repeating this procedure yields coefficient
-estimates, variable selection, and regularization simultaneously.
+estimates, variable selection, and regularization simultaneously. In the
+implementation used here, separate predictor sets can be specified for the mean
+(`mu`) and scale (`sigma`) components via the arguments `X` and `Z`.
 
 The implementation provided by **asp26boost** follows this component-wise
 boosting framework and offers methods for model fitting, prediction,
@@ -56,13 +56,12 @@ summarization, and visualization.
 
 # Installation
 
-TBD how to distribute package (TODO)
-```{r include = FALSE}
+```{r include = TRUE}
 devtools::load_all()
 ```
 
 
-```{r eval = FALSE}
+```{r include = FALSE, eval = FALSE}
 devtools::install_gitlab(
   repo = "bjarne.herbst01/asp26boost",
   host = "https://gitlab.gwdg.de"
@@ -89,9 +88,15 @@ X <- matrix(
 
 colnames(X) <- paste0("x", seq_len(p))
 
-beta <- c(2, -1.5, 1, rep(0, p - 3))
+# Heteroskedastic scale model using the same three predictors
+beta_mu <- c(2, -1.5, 1, rep(0, p - 3))
+mu <- as.numeric(X %*% beta_mu)
 
-y <- X %*% beta + rnorm(n)
+beta_sigma <- c(0.4, -0.3, 0.2, rep(0, p - 3))
+sigma <- exp(as.numeric(X %*% beta_sigma) / 2)
+
+y <- rnorm(n, mean = mu, sd = sigma)
+
 
 sample_data <- data.frame(
   y = as.numeric(y),
@@ -111,21 +116,24 @@ Gaussian component-wise boosting models are fitted using `boost_gaussian()`.
 
 ```{r}
 fit <- boost_gaussian(
-  x = sample_data[, -1],
+  X = sample_data[, -1],   # predictors for mu
+  Z = sample_data[, -1],   # predictors for sigma
   y = sample_data$y,
   mstop = 100,
-  nu = 0.05
+  nu_mu = 0.05,
+  nu_sigma = 0.05
 )
 ```
 
 The most important tuning parameters are:
 
 - `mstop`: number of boosting iterations.
-- `nu`: learning rate controlling the size of each boosting update.
+- `nu_*`: learning rate controlling the size of each boosting update, defined seperately for the mean and scale.
 
 Internally, predictors are standardized before fitting. The model is initialized
-with the mean response and updated iteratively by selecting the predictor that
-provides the largest reduction in squared-error loss.
+with the mean response and an initial scale estimate and updated iteratively by
+selecting the predictor that provides the largest reduction in squared-error
+loss.
 
 Printing the fitted object provides a compact overview of the model.
 
@@ -175,7 +183,8 @@ new_data <- sample_data[1:5, -1]
 
 predict(
   fit,
-  newdata = new_data
+  newdata_X = new_data,
+  newdata_Z = new_data
 )
 ```
 
@@ -185,7 +194,8 @@ iterations.
 ```{r}
 predict(
   fit,
-  newdata = new_data,
+  newdata_X = new_data,
+  newdata_Z = new_data,
   mstop = 25
 )
 ```
@@ -202,9 +212,19 @@ The package provides graphical diagnostics through the `plot()` method.
 Coefficient trajectories across boosting iterations can be visualized using `plot()` method by specifying `type = "path"`.
 
 ```{r}
+# For Location
 plot(
   fit,
   type = "path",
+  submodel = "mu",
+  top_n = 8,
+  scale = "original"
+)
+# And for scale
+plot(
+  fit,
+  type = "path",
+  submodel = "sigma",
   top_n = 8,
   scale = "original"
 )
@@ -217,9 +237,18 @@ training scale.
 Variable selection frequencies can be inspected by setting `type = "frequency"`.
 
 ```{r}
+# For Location
 plot(
   fit,
   type = "frequency",
+  submodel = "mu",
+  top_n = 8
+)
+# And for scale
+plot(
+  fit,
+  type = "frequency",
+  submodel = "sigma",
   top_n = 8
 )
 ```
@@ -254,11 +283,13 @@ Gaussian component-wise boosting models.
 K = 5 # Number of folds during cross-validation
 
 cv_fit <- cv_boost_gaussian(
-  x = sample_data[, -1],
+  X = sample_data[, -1],
+  Z = sample_data[, -1],
   y = sample_data$y,
   k = K,
   mstop = 1000,
-  nu = 0.05,
+  nu_mu = 0.05,
+  nu_sigma = 0.05,
   seed = 27092001
 )
 ```
@@ -281,7 +312,6 @@ summary(cv_fit)
 
 This gives additional information on the Residuals and the Coefficients.
 
-TODO: Coefficients seems to be to many??
 
 # Visualizing the Cross-Validation Curve
 
@@ -315,7 +345,8 @@ new_data <- sample_data[1:5, -1]
 
 predict(
   cv_fit,
-  newdata = new_data
+  newdata_X = new_data,
+  newdata_Z = new_data
 )
 ```
 
@@ -330,21 +361,23 @@ evaluates combinations of candidate values using repeated cross-validation.
 
 ```{r eval=TRUE}
 grid_fit <- cv_boost_grid(
-  x = sample_data[, -1],
+  X = sample_data[, -1],
+  Z = sample_data[, -1],
   y = sample_data$y,
   k = 5,
   mstop_grid = c(50, 100, 200),
-  nu_grid = c(0.01, 0.1, 0.3),
+  nu_mu_grid = c(0.01, 0.1, 0.3),
+  nu_sigma_grid = c(0.01, 0.1, 0.3),
   seed = 27092001
 )
 ```
-TODO `cv_boost_grid()` funktioniert nicht
 
+```{r eval=TRUE}
+grid_fit
 
-The returned object contains:
+```
 
-TODO
-
+The returned object contains the formula call and the best combination of hyperparameters.
 
 # Concluding Remarks
 
