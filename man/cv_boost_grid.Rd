@@ -5,16 +5,20 @@
 \title{CV with Parameter Grid}
 \usage{
 cv_boost_grid(
-  x,
+  X,
+  Z,
   y,
   k = 5,
   mstop_grid = c(50, 100, 200),
-  nu_grid = c(0.01, 0.1, 0.3),
+  nu_mu_grid = c(0.01, 0.1, 0.3),
+  nu_sigma_grid = c(0.01, 0.1, 0.3),
   seed = NULL
 )
 }
 \arguments{
-\item{x}{Data in matrix or dataframe format}
+\item{X}{data matrix or dataframe for the location submodel}
+
+\item{Z}{data matrix or dataframe for the scale submodel}
 
 \item{y}{numeric response vector}
 
@@ -22,12 +26,20 @@ cv_boost_grid(
 
 \item{mstop_grid}{vector of mstop-values}
 
-\item{nu_grid}{vector of nu-values}
+\item{nu_mu_grid}{vector of nu-values for the location submodel}
+
+\item{nu_sigma_grid}{vector of nu-values for the scale submodel}
 
 \item{seed}{optional seed}
 }
 \value{
-object with best parameters
+object of class \code{"cv_boost_grid"} containing:
+\describe{
+   \item{call}{the matched function call}
+   \item{best_combination}{data frame row with the best mstop and nu values}
+   \item{all_results}{data frame with CV errors for all parameter combinations}
+   \item{final_model}{fitted \code{boost_gaussian} model using the best parameters}
+}
 }
 \description{
 CV with Parameter Grid

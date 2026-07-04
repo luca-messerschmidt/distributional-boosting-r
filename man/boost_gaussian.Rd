@@ -2,33 +2,161 @@
 % Please edit documentation in R/boost_gaussian.R
 \name{boost_gaussian}
 \alias{boost_gaussian}
-\title{Gaussian Gradient Boosting}
+\title{Distributional Gaussian Gradient Boosting}
 \usage{
-boost_gaussian(x, y, mstop = 100, nu = 0.1)
+boost_gaussian(
+  X = NULL,
+  Z = NULL,
+  y = NULL,
+  formula = NULL,
+  data = NULL,
+  mstop = 100,
+  nu_mu = 0.1,
+  nu_sigma = 0.1,
+  method = c("cyclic", "noncyclic"),
+  patience = NULL,
+  validation_split = 0.2,
+  seed = NULL
+)
 }
 \arguments{
-\item{x}{A data frame or matrix of predictors.}
+\item{X}{A data frame or matrix of predictors for the location (mean) model.
+Ignored if \code{formula} is supplied.}
 
-\item{y}{A numeric response vector.}
+\item{Z}{A data frame or matrix of predictors for the scale (log-sd) model.
+Ignored if \code{formula} is supplied.}
 
-\item{mstop}{Number of boosting iterations.}
+\item{y}{A numeric response vector. Ignored if \code{formula} is supplied.}
 
-\item{nu}{Learning rate.}
+\item{formula}{A list with components \code{mu} (a two-sided formula,
+e.g. \code{y ~ x1 + x2}) and \code{sigma} (a formula for the scale
+submodel, e.g. \code{~ z1 + z2}). When supplied, \code{X}, \code{Z}, and
+\code{y} are constructed from \code{data} instead.}
+
+\item{data}{A data frame containing the variables referenced in
+\code{formula}. Required (and only used) when \code{formula} is supplied.}
+
+\item{mstop}{Number of boosting iterations. Either a single positive
+integer (applied to both submodels) or, for \code{method = "cyclic"}
+only, a named vector/list \code{c(mu = ..., sigma = ...)} giving separate
+iteration budgets for the two submodels. When \code{patience} is
+supplied, \code{mstop} is instead the maximum number of rounds to search
+(must be a single integer in that case).}
+
+\item{nu_mu}{Learning rate for the location submodel.}
+
+\item{nu_sigma}{Learning rate for the scale submodel.}
+
+\item{method}{Boosting update schedule. \code{"cyclic"} (default)
+alternates location/scale updates each iteration (until each submodel's
+own \code{mstop} budget, if separate, is exhausted). \code{"noncyclic"}
+picks, at each iteration, whichever submodel update yields the larger
+Gaussian log-likelihood improvement, and updates only that one.}
+
+\item{patience}{If supplied, enables internal early stopping: a single
+positive integer giving the number of consecutive rounds without
+validation-risk improvement allowed before stopping the search early.
+Requires a single scalar \code{mstop} (the maximum rounds to search).
+The optimal number of rounds found this way (\code{best_round}) is then
+used to refit the model on the \emph{full} \code{X}/\code{Z}/\code{y}, so
+the returned model itself is always trained on all the supplied data.}
+
+\item{validation_split}{Fraction of rows (in \code{(0, 1)}) held out to
+evaluate validation risk during the \code{patience} search. Ignored if
+\code{patience} is \code{NULL}. Default \code{0.2}.}
+
+\item{seed}{Optional integer seed for the random train/validation split
+used when \code{patience} is supplied (for reproducibility). Ignored if
+\code{patience} is \code{NULL}.}
 }
 \value{
-A list containing the fitted model.
+A list of class \code{"boost_gaussian"} containing fitted values,
+  coefficient paths, centering/scaling constants, and diagnostics for both
+  the location and scale submodels.
 }
 \description{
-Fits a simple component-wise gradient boosting model for Gaussian responses.
+Fits a component-wise gradient boosting model for Gaussian responses,
+jointly estimating the location (mean) and scale (standard deviation).
+}
+\details{
+This implements component-wise gradient boosting for a Gaussian
+location-scale model (in the spirit of \code{gamboostLSS}). The two
+distribution parameters are updated one base learner at a time:
+\enumerate{
+  \item \strong{Location step} – the negative gradient of the Gaussian
+    log-likelihood w.r.t. \eqn{\mu} is
+    \eqn{u_\mu = (y - \mu) / \sigma^2}.
+    Each column of \code{X} is fit by a simple linear base learner
+    (\code{lm(u_mu ~ x_j)}, with intercept); the column with the lowest
+    residual sum of squares is selected and \eqn{\hat\mu} is updated by a
+    small step \code{nu_mu}.
+  \item \strong{Scale step} – the negative gradient w.r.t. \eqn{\log\sigma}
+    is \eqn{u_\sigma = (y - \mu)^2 / \sigma^2 - 1}.  A simple linear base
+    learner is fit to each column of \code{Z} and the best is selected;
+    \eqn{\log\hat\sigma} is updated by a small step \code{nu_sigma}.
+    Working on the log scale keeps \eqn{\hat\sigma > 0} and naturally bounds
+    the step size.
+}
+Under \code{method = "cyclic"} both steps are taken every iteration (each
+submodel stops once it reaches its own \code{mstop} budget, while the other
+keeps going). Under \code{method = "noncyclic"} only the step with the
+larger likelihood improvement is taken each iteration.
+
+\strong{Risk trace}: the in-sample Gaussian negative log-likelihood is
+recorded after every round (\code{risk}, plus the pre-boosting baseline
+\code{risk0}), so convergence can be inspected directly or via
+\code{plot(fit, type = "risk")}.
+
+\strong{Internal early stopping}: when \code{patience} is supplied, a
+single random train/validation split (\code{validation_split}) is used to
+search for the number of rounds (up to \code{mstop}) that minimizes
+validation risk, stopping the search once \code{patience} rounds pass
+without improvement. The model that is actually returned is then refit on
+the complete data with \code{mstop} set to that optimal round count; the
+search details (including the validation risk trace) are stored in
+\code{fit$early_stopping}.
+
+\strong{Predictor standardisation}: both \code{X} and \code{Z} are
+standardised internally (zero mean, unit variance) before fitting so that
+all base learners compete on the same scale. Stored coefficients are
+converted back to the original predictor scale (see below).
+
+\strong{Base learners include an intercept}: each base learner is a full
+simple linear regression \code{lm(u ~ x_j)}.  The intercept term allows the
+overall level of the linear predictor to be corrected at every step.  This
+matters most for the scale submodel, whose level is initialised at
+\eqn{\log(\mathrm{sd}(y))} and must be free to move toward the correct
+residual scale.
+
+Coefficients for both submodels are stored and reported on the
+\emph{original predictor scale} (not the standardised scale).  For the
+scale submodel the linear predictor is \eqn{\log\sigma}, so a coefficient
+expresses the additive change in \eqn{\log\sigma} per unit change in the
+original predictor (equivalently, a multiplicative factor
+\eqn{\exp(\cdot)} on \eqn{\sigma}).
 }
 \examples{
 set.seed(123)
-x <- data.frame(
-  x1 = rnorm(100),
-  x2 = rnorm(100)
-)
-y <- 2 + 3 * x$x1 + rnorm(100)
+X <- data.frame(x1 = rnorm(100), x2 = rnorm(100))
+Z <- data.frame(z1 = rnorm(100), z2 = rnorm(100))
+y <- 2 + 3 * X$x1 + exp(0.5 * Z$z1) * rnorm(100)
 
-fit <- boost_gaussian(x, y, mstop = 100, nu = 0.1)
-predict(fit, x[1:5, ])
+fit <- boost_gaussian(X, Z, y, mstop = 100, nu_mu = 0.1, nu_sigma = 0.1)
+predict(fit, newdata_X = X[1:5, ], newdata_Z = Z[1:5, ])
+
+# Non-cyclic updates: only the more useful submodel update is taken
+fit_nc <- boost_gaussian(X, Z, y, mstop = 100, method = "noncyclic")
+
+# Separate iteration budgets for mu and sigma (cyclic only)
+fit_2m <- boost_gaussian(X, Z, y, mstop = c(mu = 100, sigma = 30))
+
+# Formula interface
+df <- cbind(X, Z, y = y)
+fit_f <- boost_gaussian(formula = list(mu = y ~ x1 + x2, sigma = ~ z1 + z2),
+                        data = df, mstop = 100)
+
+# Internal early stopping (searches up to mstop rounds on a 80/20 split,
+# then refits the chosen number of rounds on all the data)
+fit_es <- boost_gaussian(X, Z, y, mstop = 200, patience = 10, seed = 1)
+fit_es$early_stopping$best_round
 }

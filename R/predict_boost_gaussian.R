@@ -1,44 +1,106 @@
-#' Predict from a Gaussian Boosting Model
+#' Predict from a Distributional Gaussian Boosting Model
 #'
 #' Computes fitted or predicted values from a \code{boost_gaussian} object.
+#' Both the location (\eqn{\hat\mu}) and the scale (\eqn{\hat\sigma}) can be
+#' returned.
 #'
 #' @param object A fitted object of class \code{"boost_gaussian"}.
-#' @param newdata Optional numeric matrix or data frame of predictor values. If
-#'   omitted, in-sample fitted values are returned. If supplied, \code{newdata}
-#'   must contain all predictors used during fitting; columns are matched by
-#'   name and additional columns are ignored.
-#' @param mstop Optional non-negative integer giving the number of boosting
-#'   iterations to use. If omitted, the full fitted model is used.
-#'   \code{mstop = 0} returns the intercept-only prediction.
+#' @param newdata_X Optional data frame or matrix of location predictors.
+#'   Must contain all columns used in \code{X} at fit time, matched by name.
+#'   If omitted (together with \code{newdata_Z} and \code{newdata}), in-sample
+#'   fitted values are returned.
+#' @param newdata_Z Optional data frame or matrix of scale predictors.
+#'   Must contain all columns used in \code{Z} at fit time, matched by name.
+#'   If omitted (together with \code{newdata_X} and \code{newdata}), in-sample
+#'   fitted values are returned.
+#' @param newdata Optional single data frame with the original variable
+#'   names, used when \code{object} was fit via the \code{formula} interface
+#'   of \code{\link{boost_gaussian}}. An alternative to supplying
+#'   \code{newdata_X}/\code{newdata_Z} directly.
+#' @param mstop Optional non-negative integer: number of boosting rounds to
+#'   use. Defaults to the full fitted model. \code{mstop = 0} returns the
+#'   intercept-only predictions. Any value in \code{0:object$mstop} is allowed,
+#'   so predictions can be obtained at an earlier stopping round both
+#'   in-sample and out-of-sample. A "round" counts the same way it did during
+#'   fitting: for \code{method = "cyclic"} each round may update both
+#'   submodels (or only one, once the other's separate budget is exhausted);
+#'   for \code{method = "noncyclic"} each round updates exactly one submodel.
+#' @param what Character string specifying what to return:
+#'   \code{"mu"} (default) for location predictions,
+#'   \code{"sigma"} for scale predictions (on the original sigma scale), or
+#'   \code{"both"} for a data frame with columns \code{mu} and \code{sigma}.
 #' @param ... Further arguments, currently ignored.
 #'
 #' @details
-#' Early-stopped in-sample prediction requires the model to have been fitted with
-#' \code{keep_path = TRUE}. Prediction for \code{newdata} is reconstructed from
-#' the stored coefficient updates and does not require the fitted path.
+#' Predictions are reconstructed by accumulating the stored per-iteration
+#' updates (intercept plus slope) on the standardised predictor scale.  For
+#' out-of-sample data the supplied \code{newdata_X} / \code{newdata_Z} are
+#' standardised with the training means and standard deviations; for in-sample
+#' prediction the stored standardised training design is used.  Scale
+#' predictions are returned on the original \eqn{\sigma} scale (i.e. \code{exp}
+#' of the linear predictor on the log scale).
 #'
-#' @returns A numeric vector of predictions.
+#' @returns A numeric vector (for \code{what = "mu"} or \code{"sigma"}) or a
+#'   data frame with columns \code{mu} and \code{sigma}
+#'   (for \code{what = "both"}).
 #'
 #' @export
 #' @method predict boost_gaussian
 #'
 #' @examples
 #' set.seed(123)
-#' x <- data.frame(x1 = rnorm(50), x2 = rnorm(50))
-#' y <- 1 + 2 * x$x1 + rnorm(50)
+#' X <- data.frame(x1 = rnorm(50), x2 = rnorm(50))
+#' Z <- data.frame(z1 = rnorm(50))
+#' y <- 1 + 2 * X$x1 + exp(0.3 * Z$z1) * rnorm(50)
 #'
-#' fit <- boost_gaussian(x, y, mstop = 50)
+#' fit <- boost_gaussian(X, Z, y, mstop = 50)
 #'
+#' # In-sample predictions (full model)
 #' predict(fit)
+#' predict(fit, what = "sigma")
+#' predict(fit, what = "both")
+#'
+#' # Early stopping via mstop, in-sample and out-of-sample
 #' predict(fit, mstop = 10)
-#' predict(fit, newdata = x[1:3, ])
+#' predict(fit, newdata_X = X[1:3, ], newdata_Z = Z[1:3, , drop = FALSE])
+#' predict(fit, newdata_X = X[1:3, ], newdata_Z = Z[1:3, , drop = FALSE],
+#'         mstop = 10)
+#' predict(fit, newdata_X = X[1:3, ], newdata_Z = Z[1:3, , drop = FALSE],
+#'         what = "both")
 
-predict.boost_gaussian <- function(object, newdata = NULL, mstop = NULL, ...) {
-  # Validate model and stopping iteration
+predict.boost_gaussian <- function(object,
+                                   newdata_X = NULL,
+                                   newdata_Z = NULL,
+                                   newdata   = NULL,
+                                   mstop     = NULL,
+                                   what      = c("mu", "sigma", "both"),
+                                   ...) {
+
   if (!inherits(object, "boost_gaussian")) {
     stop("object must inherit from class 'boost_gaussian'.", call. = FALSE)
   }
+
+  what <- match.arg(what)
+
+  # ── Formula-style newdata: rebuild newdata_X / newdata_Z via stored terms ──
+  if (!is.null(newdata)) {
+    if (!is.null(newdata_X) || !is.null(newdata_Z)) {
+      stop("Supply either newdata, or newdata_X/newdata_Z, not both.",
+           call. = FALSE)
+    }
+    if (is.null(object$terms_mu) || is.null(object$terms_sigma)) {
+      stop("newdata can only be used when object was fit via the formula ",
+           "interface of boost_gaussian(); use newdata_X/newdata_Z instead.",
+           call. = FALSE)
+    }
+    newdata_X <- stats::model.matrix(stats::delete.response(object$terms_mu),
+                                     data = newdata)
+    newdata_X <- newdata_X[, colnames(newdata_X) != "(Intercept)", drop = FALSE]
+    newdata_Z <- stats::model.matrix(object$terms_sigma, data = newdata)
+    newdata_Z <- newdata_Z[, colnames(newdata_Z) != "(Intercept)", drop = FALSE]
+  }
   
+  # ── Validate mstop ────────────────────────────────────────────────────────
   if (is.null(mstop)) {
     m_use <- object$mstop
   } else {
@@ -55,66 +117,102 @@ predict.boost_gaussian <- function(object, newdata = NULL, mstop = NULL, ...) {
     m_use <- as.integer(mstop)
   }
   
-  # In-sample prediction: use the stored fitted path when available
-  if (is.null(newdata)) {
-    if (m_use == 0L) {
-      return(rep(object$initial_value, object$n))
+  # ── Resolve the standardised design to predict on ─────────────────────────
+  # In-sample (no newdata): use the stored standardised training design.
+  # Out-of-sample: validate, align, and standardise the supplied newdata with
+  # the training centering/scaling constants.  A single reconstruction path is
+  # then used for both, so in-sample early stopping (0 < mstop < object$mstop)
+  # works exactly like out-of-sample.
+  in_sample <- is.null(newdata_X) && is.null(newdata_Z)
+  
+  if (in_sample) {
+    x_std <- object$X_std
+    z_std <- object$Z_std
+  } else {
+    if (is.null(newdata_X) || is.null(newdata_Z)) {
+      stop("Both newdata_X and newdata_Z must be supplied together.", call. = FALSE)
     }
-    if (m_use == object$mstop) {
-      return(as.numeric(object$fitted_values))
+    x_new <- .validate_newdata(newdata_X, object$X_names, "newdata_X")
+    z_new <- .validate_newdata(newdata_Z, object$Z_names, "newdata_Z")
+    if (nrow(x_new) != nrow(z_new)) {
+      stop("newdata_X and newdata_Z must have the same number of rows.", call. = FALSE)
     }
-    # Early-stopped in-sample prediction requires the path
-    if (!is.null(object$fitted_path)) {
-      return(as.numeric(object$fitted_path[, m_use]))
-    }
-    stop(
-      paste0(
-        "In-sample early-stopped prediction requires keep_path = TRUE at fit time. ",
-        "Either refit with keep_path = TRUE or supply newdata."
-      ),
-      call. = FALSE
-    )
+    x_std <- sweep(sweep(x_new, 2L, object$X_center, "-"), 2L, object$X_scale, "/")
+    z_std <- sweep(sweep(z_new, 2L, object$Z_center, "-"), 2L, object$Z_scale, "/")
   }
   
-  # Check and align new predictor data
+  n_pred <- nrow(x_std)
+  
+  # Fast, exact path: full model in-sample returns the stored fitted values.
+  if (in_sample && m_use == object$mstop) {
+    return(.format_predict_output(object$fitted_mu, object$fitted_sigma, what))
+  }
+  
+  # Intercept-only prediction.
+  if (m_use == 0L) {
+    mu_pred    <- rep(object$initial_mu,             n_pred)
+    sigma_pred <- rep(exp(object$initial_log_sigma), n_pred)
+    return(.format_predict_output(mu_pred, sigma_pred, what))
+  }
+  
+  # General reconstruction (used for early stopping in- and out-of-sample, and
+  # for the full out-of-sample model): accumulate per-step intercept + slope.
+  # k_mu/k_sigma are the number of each submodel's steps that occurred within
+  # the first m_use rounds — equal to m_use itself in the classic single-mstop
+  # cyclic case, but can differ once submodels have separate budgets or the
+  # update schedule is non-cyclic.
+  k_mu    <- sum(object$round_mu    <= m_use)
+  k_sigma <- sum(object$round_sigma <= m_use)
+
+  mu_pred <- rep(object$initial_mu, n_pred)
+  for (m in seq_len(k_mu)) {
+    mu_pred <- mu_pred +
+      object$intercept_step_mu[m] +
+      object$coef_mu[m] * x_std[, object$selected_mu[m]]
+  }
+
+  log_sigma_pred <- rep(object$initial_log_sigma, n_pred)
+  for (m in seq_len(k_sigma)) {
+    log_sigma_pred <- log_sigma_pred +
+      object$intercept_step_sigma[m] +
+      object$coef_sigma[m] * z_std[, object$selected_sigma[m]]
+  }
+  sigma_pred <- exp(log_sigma_pred)
+  
+  .format_predict_output(as.numeric(mu_pred), as.numeric(sigma_pred), what)
+}
+
+# ── Internal helpers ───────────────────────────────────────────────────────────
+
+# Validate a newdata matrix/data.frame and return it as a named numeric matrix
+# with columns aligned to `required_names`.
+.validate_newdata <- function(newdata, required_names, arg_name) {
   if (!is.matrix(newdata) && !is.data.frame(newdata)) {
-    stop("newdata must be a matrix or data.frame.", call. = FALSE)
+    stop(sprintf("%s must be a matrix or data.frame.", arg_name), call. = FALSE)
   }
-  
   nd <- as.data.frame(newdata, stringsAsFactors = FALSE)
-  
-  missing_vars <- setdiff(object$predictor_names, names(nd))
+  missing_vars <- setdiff(required_names, names(nd))
   if (length(missing_vars) > 0L) {
-    stop(paste("newdata is missing columns:", paste(missing_vars, collapse = ", ")),
+    stop(sprintf("%s is missing columns: %s",
+                 arg_name, paste(missing_vars, collapse = ", ")),
          call. = FALSE)
   }
-  if (!all(vapply(nd[object$predictor_names], is.numeric, logical(1)))) {
-    stop("All required predictors in newdata must be numeric.", call. = FALSE)
+  if (!all(vapply(nd[required_names], is.numeric, logical(1)))) {
+    stop(sprintf("All required predictors in %s must be numeric.", arg_name),
+         call. = FALSE)
   }
-  
-  x_new <- as.matrix(nd[, object$predictor_names, drop = FALSE])
-  storage.mode(x_new) <- "double"
-  
-  if (anyNA(x_new)) {
-    stop("newdata must not contain missing, NaN, or infinite values.", call. = FALSE)
+  mat <- as.matrix(nd[, required_names, drop = FALSE])
+  storage.mode(mat) <- "double"
+  if (!all(is.finite(mat))) {
+    stop(sprintf("%s must not contain missing, NaN, or infinite values.", arg_name),
+         call. = FALSE)
   }
-  if (!all(is.finite(x_new))) {
-    stop("newdata must not contain missing, NaN, or infinite values.", call. = FALSE)
-  }
-  
-  if (m_use == 0L) {
-    return(rep(object$initial_value, nrow(x_new)))
-  }
-  
-  x_std <- sweep(x_new, 2L, object$x_center, FUN = "-")
-  x_std <- sweep(x_std, 2L, object$x_scale,  FUN = "/")
-  
-  prediction <- rep(object$initial_value, nrow(x_std))
-  
-  for (m in seq_len(m_use)) {
-    variable   <- object$selected_variables[m]
-    prediction <- prediction + object$coefficients[m] * x_std[, variable]
-  }
-  
-  as.numeric(prediction)
+  mat
+}
+
+# Return mu, sigma, or both depending on `what`.
+.format_predict_output <- function(mu_pred, sigma_pred, what) {
+  if (what == "mu")    return(as.numeric(mu_pred))
+  if (what == "sigma") return(as.numeric(sigma_pred))
+  data.frame(mu = as.numeric(mu_pred), sigma = as.numeric(sigma_pred))
 }

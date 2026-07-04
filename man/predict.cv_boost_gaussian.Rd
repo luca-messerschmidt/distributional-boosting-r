@@ -4,14 +4,14 @@
 \alias{predict.cv_boost_gaussian}
 \title{predict-method for CV Function "cv_boost_gaussian"}
 \usage{
-\method{predict}{cv_boost_gaussian}(object, newdata, ...)
+\method{predict}{cv_boost_gaussian}(object, newdata_X = NULL, newdata_Z = NULL, ...)
 }
 \arguments{
 \item{object}{object of class "cv_boost_gaussian"}
 
-\item{newdata}{new data for the prediction}
-
 \item{...}{further parameters for the prediction}
+
+\item{newdata}{new data for the prediction}
 }
 \value{
 numeric prediction-vector
