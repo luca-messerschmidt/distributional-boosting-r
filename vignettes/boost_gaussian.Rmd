@@ -56,16 +56,21 @@ summarization, and visualization.
 
 # Installation
 
-TBD
-TODO, for now only to be functional
+TBD how to distribute package (TODO)
 ```{r include = FALSE}
 devtools::load_all()
 ```
 
 
+```{r eval = FALSE}
+devtools::install_gitlab(
+  repo = "bjarne.herbst01/asp26boost",
+  host = "https://gitlab.gwdg.de"
+)
+```
 
 
-# Simulated Example Data
+# Simulated Sample Data
 
 To illustrate the basic functionality, we generate a synthetic regression
 dataset with a sparse underlying signal.
@@ -144,13 +149,9 @@ A more detailed summary can be obtained using `summary()`.
 summary(fit)
 ```
 
-The summary object contains information on:
+The summary object provides additional information on:
 
-- the original model call
-- model dimensions
-- tuning parameters
 - summary of residuals
-- basic training-fit statistics
 - coefficient estimates on the original predictor scale for selected predictors
 - list of non-selected predictors (`coefficient = 0`)
 
@@ -198,31 +199,33 @@ For in-sample early-stopped predictions, the model must have been fitted with
 
 The package provides graphical diagnostics through the `plot()` method.
 
-Coefficient trajectories across boosting iterations can be visualized using the
-path plot.
+Coefficient trajectories across boosting iterations can be visualized using `plot()` method by specifying `type = "path"`.
 
 ```{r}
 plot(
   fit,
-  type = "path"
+  type = "path",
+  top_n = 8,
+  scale = "original"
 )
 ```
 
-By default, the most frequently selected variables are displayed. Coefficients
-may be shown either on the original predictor scale or on the standardized
+By default, the eight coefficients with the highest selection frequencies are displayed. Coefficients
+may be shown either on the original (default) predictor scale or on the standardized
 training scale.
 
-Variable selection frequencies can be inspected using
+Variable selection frequencies can be inspected by setting `type = "frequency"`.
 
 ```{r}
 plot(
   fit,
-  type = "frequency"
+  type = "frequency",
+  top_n = 8
 )
 ```
 
 This visualization summarizes how often each predictor was selected during the
-boosting process and provides a simple measure of variable importance.
+boosting process and provides a simple measure of variable importance. Again the number of Predictors displayed can be adjusted via `top_n`.
 
 **Note**
 To use the `plot()`diagnostics the model must be fitted with `keep_path = TRUE`, which is the default.
@@ -235,13 +238,11 @@ A key tuning parameter in component-wise boosting is the number of boosting
 iterations, denoted by `mstop`. While increasing the number of iterations
 typically decreases the training error, excessively large values may lead to
 overfitting. Consequently, early stopping serves as the primary regularization
-mechanism in statistical boosting.
-
-TODO: Can be seen with x10 and x8?
+mechanism in statistical boosting, encouraging sparsety in the selected variables.
 
 
 A common strategy for selecting an appropriate stopping iteration is
-cross-validation. The data are repeatedly split into training and validation
+cross-validation. The data is repeatedly split into training and validation
 subsets. Models are fitted on the training folds and evaluated on the
 corresponding validation folds. The value of `mstop` that minimizes the
 estimated out-of-sample prediction error is then selected.
@@ -262,11 +263,11 @@ cv_fit <- cv_boost_gaussian(
 )
 ```
 
-The resulting object contains the cross-validation errors for all boosting
-iterations, the selected stopping iteration, and a final model refitted on the
-complete dataset using the optimal value of `mstop`.
-
 # Inspecting Cross-Validation Results
+
+The resulting object contains the selected variables in the optimal model,
+the optimal `mstop`, and a final model refitted on the complete dataset using the optimal value of `mstop`.
+
 
 ```{r}
 cv_fit
@@ -278,9 +279,9 @@ A more detailed summary can be obtained via:
 summary(cv_fit)
 ```
 
-The summary includes:
+This gives additional information on the Residuals and the Coefficients.
 
-TODO
+TODO: Coefficients seems to be to many??
 
 # Visualizing the Cross-Validation Curve
 
@@ -294,9 +295,6 @@ The blue curve represents the mean validation error across folds as a function
 of the boosting iteration. The vertical dashed line indicates the selected
 stopping iteration minimizing the estimated prediction error.
 
-This diagnostic plot is useful for assessing whether model performance has
-stabilized and whether the selected value of `mstop` lies in a region of
-relatively low validation error.
 
 # Prediction Using the Cross-Validated Model
 
@@ -307,10 +305,10 @@ Predictions from a cross-validated model can be generated directly via
 predict(cv_fit)
 ```
 
-When no new data are supplied, fitted values from the refitted model are
+When no new data is supplied, fitted values from the refitted model are
 returned.
 
-Predictions for new observations can be obtained using:
+Predictions for new observations can be obtained by specifying `newdata`.
 
 ```{r}
 new_data <- sample_data[1:5, -1]
@@ -322,7 +320,7 @@ predict(
 ```
 
 Internally, predictions are delegated to the final boosting model fitted using
-the selected stopping iteration.
+the optimal `mstop` value.
 
 # Hyperparameter Grid Search
 
@@ -330,7 +328,7 @@ In some situations, both the stopping iteration `mstop` and the learning rate
 `nu` may be treated as tuning parameters. The function `cv_boost_grid()`
 evaluates combinations of candidate values using repeated cross-validation.
 
-```{r eval=FALSE}
+```{r eval=TRUE}
 grid_fit <- cv_boost_grid(
   x = sample_data[, -1],
   y = sample_data$y,
@@ -345,13 +343,8 @@ TODO `cv_boost_grid()` funktioniert nicht
 
 The returned object contains:
 
-- the best-performing parameter combination,
-- cross-validation results for all evaluated combinations,
-- a final model fitted using the selected hyperparameters.
+TODO
 
-Grid search can be useful when there is substantial uncertainty regarding the
-appropriate learning rate or when predictive performance is the primary
-objective.
 
 # Concluding Remarks
 
