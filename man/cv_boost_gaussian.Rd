@@ -12,9 +12,10 @@ cv_boost_gaussian(
   mstop = 100,
   nu_mu = 0.1,
   nu_sigma = 0.1,
+  method = "cyclic",
   seed = NULL,
   folds = NULL,
-  patience = NULL
+  patience_cv = NULL
 )
 }
 \arguments{
@@ -32,11 +33,13 @@ cv_boost_gaussian(
 
 \item{nu_sigma}{learning rate for scale submodel}
 
+\item{method}{boosting update rule ("cyclic", "noncyclic")}
+
 \item{seed}{random seed for reproducibility}
 
 \item{folds}{optional fold vector, if random generation is not wanted}
 
-\item{patience}{threshold for early stopping}
+\item{patience_cv}{threshold for early stopping}
 }
 \value{
 object of class "cv_boost_gaussian"

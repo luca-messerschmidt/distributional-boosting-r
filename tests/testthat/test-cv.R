@@ -101,7 +101,8 @@ test_that("cv_boost_grid risk-minimization test", {
 
   expect_equal(grid_res$final_model$nu_mu, grid_res$best_combination$nu_mu)
   expect_equal(grid_res$final_model$nu_sigma, grid_res$best_combination$nu_sigma)
-  expect_equal(grid_res$final_model$mstop, grid_res$best_combination$mstop)
+  expect_equal(grid_res$final_model$mstop, grid_res$best_combination$optimal_stop)
+  expect_true(grid_res$best_combination$optimal_stop <= grid_res$best_combination$mstop)
 })
 
 test_that("cv_boost_grid reproducibility", {
@@ -141,6 +142,3 @@ test_that("cv_boost_gaussian invalid folds", {
   expect_error(cv_boost_gaussian(X, Z, y, k = 2, folds = 1:9))
   expect_error(cv_boost_gaussian(X, Z, y, k = 2, folds = c(1:5, rep(3, 5))))
 })
-
-
-
