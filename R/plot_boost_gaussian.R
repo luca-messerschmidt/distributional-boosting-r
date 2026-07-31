@@ -5,9 +5,12 @@
 #'
 #' @param x A fitted object of class \code{"boost_gaussian"}.
 #' @param type Plot type: \code{"path"} for cumulative coefficient paths,
-#'   \code{"frequency"} for variable selection frequencies, or \code{"risk"}
+#'   \code{"frequency"} for variable selection frequencies, \code{"risk"}
 #'   for the in-sample (and, if internal early stopping was used, validation)
-#'   negative log-likelihood trace over boosting rounds.
+#'   negative log-likelihood trace over boosting rounds, or \code{"partial"}
+#'   for a variable's fitted partial effect (needed when \code{learner =
+#'   "spline"}/\code{"auto"} was used, since a smooth term can't be
+#'   summarised by a single coefficient).
 #' @param submodel Which submodel to plot: \code{"mu"} (location, default) or
 #'   \code{"sigma"} (scale).
 #' @param top_n Maximum number of variables shown in the coefficient path plot.
@@ -18,11 +21,17 @@
 #'   the additive effect on \eqn{\log\sigma} per unit change in the original
 #'   \eqn{z_j}.  \code{"standardized"} shows coefficients on the standardised
 #'   predictor scale.
+#' @param variable Required when \code{type = "partial"}: the name of the
+#'   predictor (in \code{submodel}) whose fitted partial effect to plot.
 #' @param ... Additional graphical arguments passed to base plotting functions.
 #'
 #' @details
 #' The path plot shows cumulative coefficient updates over boosting iterations.
-#' The frequency plot shows how often each predictor was selected.
+#' The frequency plot shows how often each predictor was selected. The
+#' partial-effect plot shows a single variable's fitted contribution to the
+#' (standardised) linear predictor across its observed range -- a straight
+#' line for a variable fit entirely by the linear base learner, or a curve
+#' for one that received spline steps.
 #'
 #' @returns The input object \code{x}, invisibly.
 #'
@@ -43,10 +52,11 @@
 #' plot(fit, type = "frequency", submodel = "sigma")
 
 plot.boost_gaussian <- function(x,
-                                type     = c("path", "frequency", "risk"),
+                                type     = c("path", "frequency", "risk", "partial"),
                                 submodel = c("mu", "sigma"),
                                 top_n    = 8,
                                 scale    = c("original", "standardized"),
+                                variable = NULL,
                                 ...) {
   if (!inherits(x, "boost_gaussian")) {
     stop("x must inherit from class 'boost_gaussian'.", call. = FALSE)
@@ -65,6 +75,23 @@ plot.boost_gaussian <- function(x,
     .plot_boost_frequency(x, submodel = submodel, ...)
   } else if (type == "risk") {
     .plot_boost_risk(x, ...)
+  } else if (type == "partial") {
+    if (is.null(variable)) {
+      stop("variable must be supplied when type = \"partial\".", call. = FALSE)
+    }
+    if (submodel == "mu") {
+      .plot_boost_partial(selected_k = x$selected_mu, coef_k = x$coef_mu,
+                          intercept_step_k = x$intercept_step_mu,
+                          x_std = x$X_std, center_k = x$X_center,
+                          scale_k = x$X_scale, variable = variable,
+                          param_label = "Location", ...)
+    } else {
+      .plot_boost_partial(selected_k = x$selected_sigma, coef_k = x$coef_sigma,
+                          intercept_step_k = x$intercept_step_sigma,
+                          x_std = x$Z_std, center_k = x$Z_center,
+                          scale_k = x$Z_scale, variable = variable,
+                          param_label = "Scale (log-sigma)", ...)
+    }
   } else {
     .plot_boost_path(x, submodel = submodel, top_n = top_n, scale = scale, ...)
   }
@@ -215,6 +242,44 @@ plot.boost_gaussian <- function(x,
   graphics::text(bp, freq + max(freq) * 0.02,
                  labels = paste0(round(100 * freq / n_steps, 1), "%"),
                  cex = 0.75, col = "grey30")
+}
+
+# ── Internal: partial-effect plot ─────────────────────────────────────────────
+#
+# Plots one variable's accumulated fitted effect (linear and/or spline steps
+# that ever selected it) across its observed range -- a straight line if
+# every step for that variable was linear, a curve if any were spline steps.
+# Uses .compute_partial_effect() (R/learner_spline.R), which reconstructs the
+# effect via .evaluate_step() from the stored per-step coefficients/basis
+# information, so this works identically for boost_gaussian() and the
+# boost_dist family (Gamma/Poisson/Binomial) submodels.
+.plot_boost_partial <- function(selected_k, coef_k, intercept_step_k, x_std,
+                                center_k, scale_k, variable, param_label,
+                                n_grid = 100, ...) {
+  if (!(variable %in% colnames(x_std))) {
+    stop(sprintf("variable '%s' not found among this submodel's predictors.",
+                 variable), call. = FALSE)
+  }
+
+  pe <- .compute_partial_effect(selected_k, coef_k, intercept_step_k,
+                                x_std[, variable], variable, n_grid = n_grid)
+  grid_orig <- pe$grid_std * scale_k[[variable]] + center_k[[variable]]
+
+  dots       <- list(...)
+  main_title <- if (!is.null(dots$main)) dots$main else
+    sprintf("%s: partial effect of %s", param_label, variable)
+  plot_args  <- dots[setdiff(names(dots), c("main", "xlab", "ylab", "type", "col", "lwd"))]
+
+  do.call(graphics::plot, c(list(
+    x = grid_orig, y = pe$effect, type = "l", lwd = 2, col = "steelblue",
+    xlab = if (!is.null(dots$xlab)) dots$xlab else variable,
+    ylab = if (!is.null(dots$ylab)) dots$ylab else
+      "Partial effect (standardised linear predictor scale)",
+    main = main_title
+  ), plot_args))
+
+  graphics::abline(h = 0, lty = 3, col = "grey70")
+  invisible(NULL)
 }
 
 # ── Internal: risk (negative log-likelihood) trace plot ────────────────────────

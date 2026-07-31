@@ -40,6 +40,11 @@
 #' @param seed Optional integer seed for the random train/validation split
 #'   used when \code{patience} is supplied (for reproducibility). Ignored if
 #'   \code{patience} is \code{NULL}.
+#' @param learner Base learner type for both submodels. \code{"linear"}
+#'   (default) reproduces the original simple-linear-per-column behavior.
+#'   \code{"spline"} fits a df-equalized P-spline per column instead.
+#'   \code{"auto"} lets each boosting step pick whichever of the two gives
+#'   the lower residual sum of squares.
 #'
 #' @details
 #' This implements component-wise gradient boosting for a Gaussian
@@ -134,9 +139,10 @@ boost_gaussian <- function(X = NULL, Z = NULL, y = NULL, formula = NULL,
                            data = NULL, mstop = 100, nu_mu = 0.1,
                            nu_sigma = 0.1, method = c("cyclic", "noncyclic"),
                            patience = NULL, validation_split = 0.2,
-                           seed = NULL) {
+                           seed = NULL, learner = c("linear", "spline", "auto")) {
 
-  method <- match.arg(method)
+  method  <- match.arg(method)
+  learner <- match.arg(learner)
 
   # ── Formula interface: build X, Z, y from data ──────────────────────────────
   terms_mu <- NULL
@@ -219,7 +225,8 @@ boost_gaussian <- function(X = NULL, Z = NULL, y = NULL, formula = NULL,
     search <- .early_stop_search(
       X = X, Z = Z, y = y, mstop_max = mstop_mu, nu_mu = nu_mu,
       nu_sigma = nu_sigma, method = method,
-      validation_split = validation_split, patience = patience, seed = seed
+      validation_split = validation_split, patience = patience, seed = seed,
+      learner = learner
     )
     mstop_mu    <- search$best_round
     mstop_sigma <- search$best_round
@@ -257,38 +264,40 @@ boost_gaussian <- function(X = NULL, Z = NULL, y = NULL, formula = NULL,
   y_sd <- sd(y)
   if (!is.finite(y_sd) || y_sd == 0) y_sd <- 1
 
-  mu_hat        <- rep(mean(y), n)
-  log_sigma_hat <- rep(log(y_sd), n)
-  sigma_hat     <- exp(log_sigma_hat)
+  # ── Family + generalized boosting loop ──────────────────────────────────────
+  # boost_gaussian() is a thin wrapper around the family-driven generalized
+  # engine: it builds the 2-parameter Gaussian family object (mu, sigma) and
+  # delegates to .run_boosting_loop_general(), then translates the result
+  # back into this function's field names below. Per-step history is
+  # recorded per submodel (selected_*, coef_*, intercept_step_*), in the
+  # order each submodel's steps were actually applied, together with the
+  # GLOBAL round at which each step happened (round_*). For the classic
+  # single-mstop cyclic case round_mu == round_sigma == seq_len(mstop),
+  # reproducing the original algorithm exactly. For noncyclic / two-mstop-
+  # cyclic, round_mu and round_sigma can differ in length and have gaps,
+  # which is how predict()/plot() reconstruct partial fits correctly
+  # regardless of update schedule.
+  family <- .family_gaussian()
 
-  # ── Boosting loop ────────────────────────────────────────────────────────────
-  # Per-step history is recorded per submodel (selected_*, coef_*,
-  # intercept_step_*), in the order each submodel's steps were actually
-  # applied, together with the GLOBAL round at which each step happened
-  # (round_*). For the classic single-mstop cyclic case round_mu == round_sigma
-  # == seq_len(mstop), reproducing the original algorithm exactly. For
-  # noncyclic / two-mstop-cyclic, round_mu and round_sigma can differ in
-  # length and have gaps, which is how predict()/plot() reconstruct partial
-  # fits correctly regardless of update schedule.
-  fit_state <- .run_boosting_loop(
-    X_std = X_std, Z_std = Z_std, y = y,
-    mu_hat = mu_hat, sigma_hat = sigma_hat, log_sigma_hat = log_sigma_hat,
-    nu_mu = nu_mu, nu_sigma = nu_sigma,
-    method = method, mstop_mu = mstop_mu, mstop_sigma = mstop_sigma
+  fit_state <- .run_boosting_loop_general(
+    designs = list(mu = X_std, sigma = Z_std), y = y, family = family,
+    nus     = list(mu = nu_mu, sigma = nu_sigma),
+    mstops  = list(mu = mstop_mu, sigma = mstop_sigma),
+    method  = method, learner = learner
   )
 
-  mu_hat        <- fit_state$mu_hat
-  sigma_hat     <- fit_state$sigma_hat
-  log_sigma_hat <- fit_state$log_sigma_hat
+  mu_hat        <- fit_state$par$mu
+  sigma_hat     <- fit_state$par$sigma
+  log_sigma_hat <- fit_state$eta$sigma
 
-  selected_mu          <- fit_state$selected_mu
-  coef_mu              <- fit_state$coef_mu
-  intercept_step_mu    <- fit_state$intercept_step_mu
-  round_mu             <- fit_state$round_mu
-  selected_sigma       <- fit_state$selected_sigma
-  coef_sigma           <- fit_state$coef_sigma
-  intercept_step_sigma <- fit_state$intercept_step_sigma
-  round_sigma          <- fit_state$round_sigma
+  selected_mu          <- fit_state$selected$mu
+  coef_mu              <- fit_state$coef$mu
+  intercept_step_mu    <- fit_state$intercept_step$mu
+  round_mu             <- fit_state$round$mu
+  selected_sigma       <- fit_state$selected$sigma
+  coef_sigma           <- fit_state$coef$sigma
+  intercept_step_sigma <- fit_state$intercept_step$sigma
+  round_sigma          <- fit_state$round$sigma
   n_rounds             <- fit_state$n_rounds
   step_log             <- fit_state$step_log
 
@@ -298,15 +307,15 @@ boost_gaussian <- function(X = NULL, Z = NULL, y = NULL, formula = NULL,
   r_squared <- if (tss == 0) NA_real_ else 1 - sum(residuals^2) / tss
 
   # ── Net coefficients: standardised scale ────────────────────────────────────
-  net_coef_mu_std <- tapply(coef_mu, selected_mu, sum)
-  net_coef_mu_std <- net_coef_mu_std[names(X_std)]
-  names(net_coef_mu_std) <- names(X_std)
-  net_coef_mu_std[is.na(net_coef_mu_std)] <- 0
+  # When learner == "linear" (the default), .legacy_net_coef() reproduces the
+  # original tapply()-based aggregation exactly. When a variable received a
+  # spline step (learner == "spline"/"auto"), its net coefficient can no
+  # longer be described by a single number and is reported as NA instead.
+  agg_mu    <- .legacy_net_coef(coef_mu, intercept_step_mu, selected_mu, names(X_std))
+  agg_sigma <- .legacy_net_coef(coef_sigma, intercept_step_sigma, selected_sigma, names(Z_std))
 
-  net_coef_sigma_std <- tapply(coef_sigma, selected_sigma, sum)
-  net_coef_sigma_std <- net_coef_sigma_std[names(Z_std)]
-  names(net_coef_sigma_std) <- names(Z_std)
-  net_coef_sigma_std[is.na(net_coef_sigma_std)] <- 0
+  net_coef_mu_std    <- agg_mu$net_std
+  net_coef_sigma_std <- agg_sigma$net_std
 
   # ── Net coefficients: original predictor scale ───────────────────────────────
   # The fitted linear predictor on the standardised scale is
@@ -314,18 +323,18 @@ boost_gaussian <- function(X = NULL, Z = NULL, y = NULL, formula = NULL,
   # Converting x_std_j = (x_j - center_j)/scale_j to the original scale gives
   # slope_orig_j = slope_std_j / scale_j and folds the -center_j/scale_j terms
   # into the intercept.
-  total_intercept_step_mu <- sum(intercept_step_mu)
+  total_intercept_step_mu <- agg_mu$total_intercept_step
   net_coef_mu_orig <- net_coef_mu_std / X_scale
   intercept_mu     <- mean(y) + total_intercept_step_mu -
-    sum(net_coef_mu_orig * X_center)
+    sum(net_coef_mu_orig * X_center, na.rm = TRUE)
 
   # Scale: same logic on the log-sigma linear predictor.
   #   One unit change in original z_j changes log(sigma) by beta_sigma_orig_j,
   #   i.e. multiplies sigma by exp(beta_sigma_orig_j).
-  total_intercept_step_sigma <- sum(intercept_step_sigma)
+  total_intercept_step_sigma <- agg_sigma$total_intercept_step
   net_coef_sigma_orig <- net_coef_sigma_std / Z_scale
   intercept_sigma     <- log(y_sd) + total_intercept_step_sigma -
-    sum(net_coef_sigma_orig * Z_center)
+    sum(net_coef_sigma_orig * Z_center, na.rm = TRUE)
 
   result <- list(
     # ── Location submodel ──
@@ -338,6 +347,9 @@ boost_gaussian <- function(X = NULL, Z = NULL, y = NULL, formula = NULL,
     net_coef_mu_orig       = net_coef_mu_orig,
     intercept_mu           = intercept_mu,
     fitted_mu              = as.numeric(mu_hat),
+    # NULL unless learner = "spline"/"auto" produced at least one spline
+    # step for a location predictor (see .smooth_terms_table()).
+    smooth_terms_mu        = .smooth_terms_table(coef_mu),
     # ── Scale submodel ──
     initial_log_sigma      = log(y_sd),
     selected_sigma         = selected_sigma,
@@ -349,10 +361,12 @@ boost_gaussian <- function(X = NULL, Z = NULL, y = NULL, formula = NULL,
     intercept_sigma        = intercept_sigma,
     fitted_log_sigma       = as.numeric(log_sigma_hat),
     fitted_sigma           = as.numeric(sigma_hat),
+    smooth_terms_sigma     = .smooth_terms_table(coef_sigma),
     # ── Shared ──
     residuals              = as.numeric(residuals),
     r_squared              = r_squared,
     method                 = method,
+    learner                = learner,
     mstop                  = n_rounds,
     mstop_mu               = length(selected_mu),
     mstop_sigma            = length(selected_sigma),
@@ -472,7 +486,8 @@ boost_gaussian <- function(X = NULL, Z = NULL, y = NULL, formula = NULL,
 # the throwaway train-only fit itself is discarded; the calling boost_gaussian()
 # refits on the full data at that round count.
 .early_stop_search <- function(X, Z, y, mstop_max, nu_mu, nu_sigma, method,
-                               validation_split, patience, seed) {
+                               validation_split, patience, seed,
+                               learner = "linear") {
   if (!is.numeric(validation_split) || length(validation_split) != 1L ||
       is.na(validation_split) || validation_split <= 0 ||
       validation_split >= 1) {
@@ -520,24 +535,16 @@ boost_gaussian <- function(X = NULL, Z = NULL, y = NULL, formula = NULL,
   val_X_std   <- sweep(sweep(as.matrix(val_X), 2L, X_center, "-"), 2L, X_scale, "/")
   val_Z_std   <- sweep(sweep(as.matrix(val_Z), 2L, Z_center, "-"), 2L, Z_scale, "/")
 
-  y_sd <- sd(train_y)
-  if (!is.finite(y_sd) || y_sd == 0) y_sd <- 1
+  family <- .family_gaussian()
 
-  mu_hat        <- rep(mean(train_y), length(train_idx))
-  log_sigma_hat <- rep(log(y_sd), length(train_idx))
-  sigma_hat     <- exp(log_sigma_hat)
-
-  val_mu_hat        <- rep(mean(train_y), n_val)
-  val_log_sigma_hat <- rep(log(y_sd), n_val)
-
-  fit_state <- .run_boosting_loop(
-    X_std = train_X_std, Z_std = train_Z_std, y = train_y,
-    mu_hat = mu_hat, sigma_hat = sigma_hat, log_sigma_hat = log_sigma_hat,
-    nu_mu = nu_mu, nu_sigma = nu_sigma, method = method,
-    mstop_mu = mstop_max, mstop_sigma = mstop_max,
-    val_X_std = val_X_std, val_Z_std = val_Z_std, val_y = val_y,
-    val_mu_hat = val_mu_hat, val_log_sigma_hat = val_log_sigma_hat,
-    patience = patience
+  fit_state <- .run_boosting_loop_general(
+    designs = list(mu = train_X_std, sigma = train_Z_std), y = train_y,
+    family  = family,
+    nus     = list(mu = nu_mu, sigma = nu_sigma),
+    mstops  = list(mu = mstop_max, sigma = mstop_max),
+    method  = method,
+    val_designs = list(mu = val_X_std, sigma = val_Z_std), val_y = val_y,
+    patience = patience, learner = learner
   )
 
   list(
@@ -546,286 +553,5 @@ boost_gaussian <- function(X = NULL, Z = NULL, y = NULL, formula = NULL,
     val_risk   = fit_state$val_risk,
     n_train    = length(train_idx),
     n_val      = n_val
-  )
-}
-
-# ── Internal: boosting loop (cyclic and noncyclic) ──────────────────────────
-
-# Validation tracking (val_*, patience) is only used by .early_stop_search();
-# when val_y is NULL the loop behaves exactly as before (no early break, no
-# validation risk computed).
-.run_boosting_loop <- function(X_std, Z_std, y, mu_hat, sigma_hat,
-                                log_sigma_hat, nu_mu, nu_sigma, method,
-                                mstop_mu, mstop_sigma,
-                                val_X_std = NULL, val_Z_std = NULL,
-                                val_y = NULL, val_mu_hat = NULL,
-                                val_log_sigma_hat = NULL, patience = NULL) {
-  pX <- ncol(X_std)
-  pZ <- ncol(Z_std)
-  track_val <- !is.null(val_y)
-
-  # Fits the best base learner of u against every column of `design`.
-  .best_base_learner <- function(design, u) {
-    a   <- mean(u)
-    best_rss <- Inf
-    best_var <- NULL
-    best_slope <- NULL
-    best_intercept <- NULL
-    for (j in seq_len(ncol(design))) {
-      xj   <- design[[j]]
-      ss   <- sum(xj^2)
-      b    <- if (ss > 0) sum(xj * u) / ss else 0
-      pred <- a + b * xj
-      rss  <- sum((u - pred)^2)
-      if (rss < best_rss) {
-        best_rss       <- rss
-        best_var       <- names(design)[j]
-        best_slope     <- b
-        best_intercept <- a
-      }
-    }
-    list(var = best_var, slope = best_slope, intercept = best_intercept)
-  }
-
-  risk0 <- -sum(dnorm(y, mu_hat, sigma_hat, log = TRUE))
-  if (track_val) {
-    val_sigma_hat <- exp(val_log_sigma_hat)
-    val_risk0     <- -sum(dnorm(val_y, val_mu_hat, val_sigma_hat, log = TRUE))
-    best_val_risk <- Inf
-    best_round    <- 0L
-    no_improve    <- 0L
-  }
-  executed_rounds <- 0L
-
-  if (method == "cyclic") {
-    n_rounds <- max(mstop_mu, mstop_sigma)
-
-    selected_mu          <- character(mstop_mu)
-    coef_mu              <- numeric(mstop_mu)
-    intercept_step_mu    <- numeric(mstop_mu)
-    round_mu             <- integer(mstop_mu)
-    selected_sigma       <- character(mstop_sigma)
-    coef_sigma           <- numeric(mstop_sigma)
-    intercept_step_sigma <- numeric(mstop_sigma)
-    round_sigma          <- integer(mstop_sigma)
-
-    log_submodel <- character(mstop_mu + mstop_sigma)
-    log_variable <- character(mstop_mu + mstop_sigma)
-    log_coef     <- numeric(mstop_mu + mstop_sigma)
-    log_intercept<- numeric(mstop_mu + mstop_sigma)
-    log_round    <- integer(mstop_mu + mstop_sigma)
-    log_idx      <- 0L
-
-    risk    <- numeric(n_rounds)
-    val_risk <- if (track_val) numeric(n_rounds) else NULL
-
-    for (round in seq_len(n_rounds)) {
-
-      if (round <= mstop_mu) {
-        # ── Location step ──
-        u_mu     <- (y - mu_hat) / sigma_hat^2
-        best     <- .best_base_learner(X_std, u_mu)
-        mu_hat <- mu_hat +
-          nu_mu * (best$intercept + best$slope * X_std[[best$var]])
-        if (track_val) {
-          val_mu_hat <- val_mu_hat +
-            nu_mu * (best$intercept + best$slope * val_X_std[, best$var])
-        }
-
-        selected_mu[round]       <- best$var
-        coef_mu[round]           <- nu_mu * best$slope
-        intercept_step_mu[round] <- nu_mu * best$intercept
-        round_mu[round]          <- round
-
-        log_idx <- log_idx + 1L
-        log_submodel[log_idx]  <- "mu"
-        log_variable[log_idx]  <- best$var
-        log_coef[log_idx]      <- coef_mu[round]
-        log_intercept[log_idx] <- intercept_step_mu[round]
-        log_round[log_idx]     <- round
-      }
-
-      if (round <= mstop_sigma) {
-        # ── Scale step ──
-        u_sigma     <- (y - mu_hat)^2 / sigma_hat^2 - 1
-        best        <- .best_base_learner(Z_std, u_sigma)
-        log_sigma_hat <- log_sigma_hat +
-          nu_sigma * (best$intercept + best$slope * Z_std[[best$var]])
-        sigma_hat <- exp(log_sigma_hat)
-        if (track_val) {
-          val_log_sigma_hat <- val_log_sigma_hat +
-            nu_sigma * (best$intercept + best$slope * val_Z_std[, best$var])
-        }
-
-        selected_sigma[round]       <- best$var
-        coef_sigma[round]           <- nu_sigma * best$slope
-        intercept_step_sigma[round] <- nu_sigma * best$intercept
-        round_sigma[round]          <- round
-
-        log_idx <- log_idx + 1L
-        log_submodel[log_idx]  <- "sigma"
-        log_variable[log_idx]  <- best$var
-        log_coef[log_idx]      <- coef_sigma[round]
-        log_intercept[log_idx] <- intercept_step_sigma[round]
-        log_round[log_idx]     <- round
-      }
-
-      risk[round]     <- -sum(dnorm(y, mu_hat, sigma_hat, log = TRUE))
-      executed_rounds <- round
-
-      if (track_val) {
-        val_sigma_hat   <- exp(val_log_sigma_hat)
-        val_risk[round] <- -sum(dnorm(val_y, val_mu_hat, val_sigma_hat, log = TRUE))
-        if (val_risk[round] < best_val_risk) {
-          best_val_risk <- val_risk[round]
-          best_round    <- round
-          no_improve    <- 0L
-        } else {
-          no_improve <- no_improve + 1L
-        }
-        if (no_improve >= patience) break
-      }
-    }
-
-    mu_idx_final    <- min(executed_rounds, mstop_mu)
-    sigma_idx_final <- min(executed_rounds, mstop_sigma)
-    selected_mu          <- selected_mu[seq_len(mu_idx_final)]
-    coef_mu              <- coef_mu[seq_len(mu_idx_final)]
-    intercept_step_mu    <- intercept_step_mu[seq_len(mu_idx_final)]
-    round_mu             <- round_mu[seq_len(mu_idx_final)]
-    selected_sigma       <- selected_sigma[seq_len(sigma_idx_final)]
-    coef_sigma           <- coef_sigma[seq_len(sigma_idx_final)]
-    intercept_step_sigma <- intercept_step_sigma[seq_len(sigma_idx_final)]
-    round_sigma          <- round_sigma[seq_len(sigma_idx_final)]
-
-  } else {
-    # ── Non-cyclic: pick whichever submodel update gives the larger
-    # Gaussian log-likelihood improvement, each round. mstop_mu and
-    # mstop_sigma are equal here (single total budget) and act as the round
-    # cap. ──
-    n_rounds <- mstop_mu  # mstop_mu == mstop_sigma == total budget
-
-    selected_mu          <- character(0)
-    coef_mu              <- numeric(0)
-    intercept_step_mu    <- numeric(0)
-    round_mu             <- integer(0)
-    selected_sigma       <- character(0)
-    coef_sigma           <- numeric(0)
-    intercept_step_sigma <- numeric(0)
-    round_sigma          <- integer(0)
-
-    log_submodel <- character(n_rounds)
-    log_variable <- character(n_rounds)
-    log_coef     <- numeric(n_rounds)
-    log_intercept<- numeric(n_rounds)
-    log_round    <- integer(n_rounds)
-    log_idx      <- 0L
-
-    risk     <- numeric(n_rounds)
-    val_risk <- if (track_val) numeric(n_rounds) else NULL
-
-    for (round in seq_len(n_rounds)) {
-
-      u_mu       <- (y - mu_hat) / sigma_hat^2
-      best_mu    <- .best_base_learner(X_std, u_mu)
-      mu_cand    <- mu_hat +
-        nu_mu * (best_mu$intercept + best_mu$slope * X_std[[best_mu$var]])
-
-      u_sigma        <- (y - mu_hat)^2 / sigma_hat^2 - 1
-      best_sigma     <- .best_base_learner(Z_std, u_sigma)
-      log_sigma_cand <- log_sigma_hat +
-        nu_sigma * (best_sigma$intercept +
-                      best_sigma$slope * Z_std[[best_sigma$var]])
-      sigma_cand <- exp(log_sigma_cand)
-
-      nll_current   <- -sum(dnorm(y, mu_hat,  sigma_hat,  log = TRUE))
-      nll_after_mu  <- -sum(dnorm(y, mu_cand,  sigma_hat,  log = TRUE))
-      nll_after_sg  <- -sum(dnorm(y, mu_hat,   sigma_cand, log = TRUE))
-
-      improvement_mu    <- nll_current - nll_after_mu
-      improvement_sigma <- nll_current - nll_after_sg
-
-      if (improvement_mu >= improvement_sigma) {
-        mu_hat <- mu_cand
-        if (track_val) {
-          val_mu_hat <- val_mu_hat +
-            nu_mu * (best_mu$intercept + best_mu$slope * val_X_std[, best_mu$var])
-        }
-
-        selected_mu       <- c(selected_mu, best_mu$var)
-        coef_mu           <- c(coef_mu, nu_mu * best_mu$slope)
-        intercept_step_mu <- c(intercept_step_mu, nu_mu * best_mu$intercept)
-        round_mu          <- c(round_mu, round)
-
-        log_idx <- log_idx + 1L
-        log_submodel[log_idx]  <- "mu"
-        log_variable[log_idx]  <- best_mu$var
-        log_coef[log_idx]      <- nu_mu * best_mu$slope
-        log_intercept[log_idx] <- nu_mu * best_mu$intercept
-        log_round[log_idx]     <- round
-      } else {
-        log_sigma_hat <- log_sigma_cand
-        sigma_hat     <- sigma_cand
-        if (track_val) {
-          val_log_sigma_hat <- val_log_sigma_hat +
-            nu_sigma * (best_sigma$intercept +
-                          best_sigma$slope * val_Z_std[, best_sigma$var])
-        }
-
-        selected_sigma       <- c(selected_sigma, best_sigma$var)
-        coef_sigma           <- c(coef_sigma, nu_sigma * best_sigma$slope)
-        intercept_step_sigma <- c(intercept_step_sigma,
-                                  nu_sigma * best_sigma$intercept)
-        round_sigma          <- c(round_sigma, round)
-
-        log_idx <- log_idx + 1L
-        log_submodel[log_idx]  <- "sigma"
-        log_variable[log_idx]  <- best_sigma$var
-        log_coef[log_idx]      <- nu_sigma * best_sigma$slope
-        log_intercept[log_idx] <- nu_sigma * best_sigma$intercept
-        log_round[log_idx]     <- round
-      }
-
-      risk[round]     <- -sum(dnorm(y, mu_hat, sigma_hat, log = TRUE))
-      executed_rounds <- round
-
-      if (track_val) {
-        val_sigma_hat   <- exp(val_log_sigma_hat)
-        val_risk[round] <- -sum(dnorm(val_y, val_mu_hat, val_sigma_hat, log = TRUE))
-        if (val_risk[round] < best_val_risk) {
-          best_val_risk <- val_risk[round]
-          best_round    <- round
-          no_improve    <- 0L
-        } else {
-          no_improve <- no_improve + 1L
-        }
-        if (no_improve >= patience) break
-      }
-    }
-  }
-
-  risk <- risk[seq_len(executed_rounds)]
-  if (track_val) val_risk <- val_risk[seq_len(executed_rounds)]
-
-  step_log <- data.frame(
-    round          = log_round[seq_len(log_idx)],
-    submodel       = log_submodel[seq_len(log_idx)],
-    variable       = log_variable[seq_len(log_idx)],
-    coef           = log_coef[seq_len(log_idx)],
-    intercept_step = log_intercept[seq_len(log_idx)],
-    stringsAsFactors = FALSE
-  )
-
-  list(
-    mu_hat = mu_hat, sigma_hat = sigma_hat, log_sigma_hat = log_sigma_hat,
-    selected_mu = selected_mu, coef_mu = coef_mu,
-    intercept_step_mu = intercept_step_mu, round_mu = round_mu,
-    selected_sigma = selected_sigma, coef_sigma = coef_sigma,
-    intercept_step_sigma = intercept_step_sigma, round_sigma = round_sigma,
-    n_rounds = n_rounds, step_log = step_log,
-    risk = risk, risk0 = risk0,
-    best_round = if (track_val) best_round else NULL,
-    val_risk   = if (track_val) val_risk else NULL,
-    val_risk0  = if (track_val) val_risk0 else NULL
   )
 }
