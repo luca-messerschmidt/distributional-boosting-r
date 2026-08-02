@@ -142,5 +142,36 @@ test_that("cv_boost_gaussian invalid folds", {
   expect_error(cv_boost_gaussian(X, Z, y, k = 2, folds = c(1:5, rep(3, 5))))
 })
 
+test_that("cv_boost_gaussian forwards learner to the fitted model", {
+  set.seed(1)
+  X <- data.frame(x1 = rnorm(60))
+  Z <- data.frame(z1 = rnorm(60))
+  y <- 2 + 3 * sin(2 * X$x1) + exp(0.3 * Z$z1) * rnorm(60)
+
+  # Spline basis boundary knots are fit per-CV-fold, so held-out rows
+  # occasionally fall outside them; splines::bs() warns (harmlessly) about
+  # extrapolation in that case, which is expected here and not asserted on.
+  res <- suppressWarnings(
+    cv_boost_gaussian(X, Z, y, k = 2, mstop = 20, learner = "spline")
+  )
+  expect_equal(res$model$learner, "spline")
+})
+
+test_that("cv_boost_grid compares learners and records the winner", {
+  set.seed(1)
+  X <- data.frame(x1 = rnorm(60))
+  Z <- data.frame(z1 = rnorm(60))
+  y <- 2 + 3 * sin(2 * X$x1) + exp(0.3 * Z$z1) * rnorm(60)
+
+  res <- suppressWarnings(
+    cv_boost_grid(X, Z, y, k = 2, mstop_grid = 20,
+                 learner_grid = c("linear", "auto"))
+  )
+
+  expect_true(all(c("linear", "auto") %in% res$all_results$learner))
+  expect_equal(res$final_model$learner, res$best_combination$learner)
+  expect_error(cv_boost_grid(X, Z, y, learner_grid = "bogus"))
+})
+
 
 

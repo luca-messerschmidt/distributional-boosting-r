@@ -9,9 +9,11 @@ cv_boost_grid(
   Z,
   y,
   k = 5,
-  mstop_grid = c(50, 100, 200),
+  mstop_grid = 200,
   nu_mu_grid = c(0.01, 0.1, 0.3),
   nu_sigma_grid = c(0.01, 0.1, 0.3),
+  method = "cyclic",
+  learner_grid = "linear",
   seed = NULL
 )
 }
@@ -30,13 +32,18 @@ cv_boost_grid(
 
 \item{nu_sigma_grid}{vector of nu-values for the scale submodel}
 
+\item{method}{boosting update rule ("cyclic", "noncyclic")}
+
+\item{learner_grid}{vector of base-learner types to compare, subset of
+c("linear", "spline", "auto")}
+
 \item{seed}{optional seed}
 }
 \value{
 object of class \code{"cv_boost_grid"} containing:
 \describe{
    \item{call}{the matched function call}
-   \item{best_combination}{data frame row with the best mstop and nu values}
+   \item{best_combination}{data frame row with the best mstop, nu, and learner values}
    \item{all_results}{data frame with CV errors for all parameter combinations}
    \item{final_model}{fitted \code{boost_gaussian} model using the best parameters}
 }
