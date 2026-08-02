@@ -57,7 +57,7 @@ summarization, and visualization.
 # Installation
 
 ```{r include = TRUE}
-devtools::load_all()
+library(asp26boost)
 ```
 
 

@@ -11,13 +11,16 @@
 #' @param seed random seed for reproducibility
 #' @param folds optional fold vector, if random generation is not wanted
 #' @param patience_cv threshold for early stopping
+#' @param learner base learner type forwarded to \code{boost_gaussian()}:
+#'   "linear" (default), "spline", or "auto"
 #'
 #' @returns object of class "cv_boost_gaussian"
 #' @export
 
 cv_boost_gaussian <- function(X, Z, y, k = 5, mstop = 100, nu_mu = 0.1,
                               nu_sigma = 0.1, method = "cyclic", seed = NULL,
-                              folds = NULL, patience_cv = NULL){
+                              folds = NULL, patience_cv = NULL,
+                              learner = "linear"){
   # check input dimensions
   n <- length(y)
   if (nrow(X) != n){stop("Number of rows in X must match length of y")}
@@ -60,7 +63,7 @@ cv_boost_gaussian <- function(X, Z, y, k = 5, mstop = 100, nu_mu = 0.1,
 
     fit <- boost_gaussian(train_X, train_Z, train_y, mstop = mstop,
                           nu_mu = nu_mu, nu_sigma = nu_sigma, method = method,
-                          patience = NULL)
+                          patience = NULL, learner = learner)
 
     # early-stopping closure variables
     best_error <- Inf
@@ -94,7 +97,7 @@ cv_boost_gaussian <- function(X, Z, y, k = 5, mstop = 100, nu_mu = 0.1,
 
   final_model <- boost_gaussian(X, Z, y, mstop = optimal_stop, nu_mu = nu_mu,
                                 nu_sigma = nu_sigma, method = method,
-                                patience = NULL)
+                                patience = NULL, learner = learner)
 
   final_residuals <- y - final_model$fitted_mu
 
@@ -223,12 +226,14 @@ predict.cv_boost_gaussian <- function(object, newdata_X = NULL,
 #' @param nu_mu_grid vector of nu-values for the location submodel
 #' @param nu_sigma_grid vector of nu-values for the scale submodel
 #' @param method boosting update rule ("cyclic", "noncyclic")
+#' @param learner_grid vector of base-learner types to compare, subset of
+#'   c("linear", "spline", "auto")
 #' @param seed optional seed
 #'
 #' @returns object of class \code{"cv_boost_grid"} containing:
 #' \describe{
 #'    \item{call}{the matched function call}
-#'    \item{best_combination}{data frame row with the best mstop and nu values}
+#'    \item{best_combination}{data frame row with the best mstop, nu, and learner values}
 #'    \item{all_results}{data frame with CV errors for all parameter combinations}
 #'    \item{final_model}{fitted \code{boost_gaussian} model using the best parameters}
 #'}
@@ -237,6 +242,7 @@ cv_boost_grid <- function(X, Z, y, k = 5, mstop_grid = 200,
                           nu_mu_grid = c(0.01, 0.1, 0.3),
                           nu_sigma_grid = c(0.01, 0.1, 0.3),
                           method = "cyclic",
+                          learner_grid = "linear",
                           seed = NULL){
 
   n <- length(y)
@@ -257,12 +263,18 @@ cv_boost_grid <- function(X, Z, y, k = 5, mstop_grid = 200,
       any(nu_sigma_grid <= 0)|| length(nu_sigma_grid) == 0){
     stop("nu_sigma_grid must be non-empty vector of values in (0,1]")
   }
+  if (!is.character(learner_grid) || length(learner_grid) == 0L ||
+      !all(learner_grid %in% c("linear", "spline", "auto"))){
+    stop("learner_grid must be a non-empty vector with values in ",
+         "c('linear', 'spline', 'auto')")
+  }
 
   if(!is.null(seed)) set.seed(seed)
   folds <- generate_folds(n, k)
 
   results <- expand.grid(mstop = mstop_grid, nu_mu = nu_mu_grid,
-                         nu_sigma = nu_sigma_grid)
+                         nu_sigma = nu_sigma_grid, learner = learner_grid,
+                         stringsAsFactors = FALSE)
   results$cv_error <- NA
   results$optimal_stop <- NA
 
@@ -272,6 +284,7 @@ cv_boost_grid <- function(X, Z, y, k = 5, mstop_grid = 200,
                                 nu_mu = results$nu_mu[i],
                                 nu_sigma = results$nu_sigma[i],
                                 method = method,
+                                learner = results$learner[i],
                                 folds = folds)
     results$cv_error[i] <- min(cv_fit$mean_error_cv)
     results$optimal_stop[i] <- cv_fit$optimal_stop
@@ -284,6 +297,7 @@ cv_boost_grid <- function(X, Z, y, k = 5, mstop_grid = 200,
                                 nu_mu = results$nu_mu[best_combination],
                                 nu_sigma = results$nu_sigma[best_combination],
                                 method = method,
+                                learner = results$learner[best_combination],
                                 patience = NULL)
 
   result <- list(call = match.call(),

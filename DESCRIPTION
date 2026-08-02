@@ -5,12 +5,12 @@ Version: 0.1.0
 Authors@R: c(
     person(
       "Bjarne", "Herbst",
-      email = "jane@example.com",
+      email = "bjarne.herbst01@stud.uni-goettingen.de",
       role = c("aut", "cph", "cre")
     ),
     person(
       "Benedict", "Schnitzler",
-      email = "jane@example.com",
+      email = "b.schnitzler@stud.uni-goettingen.de",
       role = c("aut", "cph")
     ),
     person(
@@ -19,13 +19,21 @@ Authors@R: c(
       role = c("aut", "cph")
     )
   )
-Description: Implements a simple component-wise gradient boosting algorithm for
-    Gaussian location-scale models with prediction, plotting, printing, and
-    summary methods.
+Description: Implements a component-wise gradient boosting algorithm for
+    Gaussian location-scale models, as well as Gamma, Poisson, and Binomial
+    response families, with linear or P-spline base learners, prediction,
+    plotting, printing, and summary methods.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.3.3
-Suggests: 
-    testthat (>= 3.0.0)
+Imports:
+    stats,
+    graphics,
+    splines
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
 Config/testthat/edition: 3
+VignetteBuilder: knitr

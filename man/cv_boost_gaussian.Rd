@@ -15,7 +15,8 @@ cv_boost_gaussian(
   method = "cyclic",
   seed = NULL,
   folds = NULL,
-  patience_cv = NULL
+  patience_cv = NULL,
+  learner = "linear"
 )
 }
 \arguments{
@@ -40,6 +41,9 @@ cv_boost_gaussian(
 \item{folds}{optional fold vector, if random generation is not wanted}
 
 \item{patience_cv}{threshold for early stopping}
+
+\item{learner}{base learner type forwarded to \code{boost_gaussian()}:
+"linear" (default), "spline", or "auto"}
 }
 \value{
 object of class "cv_boost_gaussian"
