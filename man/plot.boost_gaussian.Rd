@@ -6,10 +6,11 @@
 \usage{
 \method{plot}{boost_gaussian}(
   x,
-  type = c("path", "frequency", "risk"),
+  type = c("path", "frequency", "risk", "partial"),
   submodel = c("mu", "sigma"),
   top_n = 8,
   scale = c("original", "standardized"),
+  variable = NULL,
   ...
 )
 }
@@ -17,9 +18,12 @@
 \item{x}{A fitted object of class \code{"boost_gaussian"}.}
 
 \item{type}{Plot type: \code{"path"} for cumulative coefficient paths,
-\code{"frequency"} for variable selection frequencies, or \code{"risk"}
+\code{"frequency"} for variable selection frequencies, \code{"risk"}
 for the in-sample (and, if internal early stopping was used, validation)
-negative log-likelihood trace over boosting rounds.}
+negative log-likelihood trace over boosting rounds, or \code{"partial"}
+for a variable's fitted partial effect (needed when \code{learner =
+"spline"}/\code{"auto"} was used, since a smooth term can't be
+summarised by a single coefficient).}
 
 \item{submodel}{Which submodel to plot: \code{"mu"} (location, default) or
 \code{"sigma"} (scale).}
@@ -34,6 +38,9 @@ the additive effect on \eqn{\log\sigma} per unit change in the original
 \eqn{z_j}.  \code{"standardized"} shows coefficients on the standardised
 predictor scale.}
 
+\item{variable}{Required when \code{type = "partial"}: the name of the
+predictor (in \code{submodel}) whose fitted partial effect to plot.}
+
 \item{...}{Additional graphical arguments passed to base plotting functions.}
 }
 \value{
@@ -45,7 +52,11 @@ Both the location and the scale submodel can be visualised.
 }
 \details{
 The path plot shows cumulative coefficient updates over boosting iterations.
-The frequency plot shows how often each predictor was selected.
+The frequency plot shows how often each predictor was selected. The
+partial-effect plot shows a single variable's fitted contribution to the
+(standardised) linear predictor across its observed range -- a straight
+line for a variable fit entirely by the linear base learner, or a curve
+for one that received spline steps.
 }
 \examples{
 set.seed(123)

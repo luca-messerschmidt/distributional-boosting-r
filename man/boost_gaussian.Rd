@@ -16,7 +16,8 @@ boost_gaussian(
   method = c("cyclic", "noncyclic"),
   patience = NULL,
   validation_split = 0.2,
-  seed = NULL
+  seed = NULL,
+  learner = c("linear", "spline", "auto")
 )
 }
 \arguments{
@@ -68,6 +69,12 @@ evaluate validation risk during the \code{patience} search. Ignored if
 \item{seed}{Optional integer seed for the random train/validation split
 used when \code{patience} is supplied (for reproducibility). Ignored if
 \code{patience} is \code{NULL}.}
+
+\item{learner}{Base learner type for both submodels. \code{"linear"}
+(default) reproduces the original simple-linear-per-column behavior.
+\code{"spline"} fits a df-equalized P-spline per column instead.
+\code{"auto"} lets each boosting step pick whichever of the two gives
+the lower residual sum of squares.}
 }
 \value{
 A list of class \code{"boost_gaussian"} containing fitted values,

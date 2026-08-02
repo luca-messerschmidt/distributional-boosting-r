@@ -164,18 +164,40 @@ predict.boost_gaussian <- function(object,
   k_mu    <- sum(object$round_mu    <= m_use)
   k_sigma <- sum(object$round_sigma <= m_use)
 
+  # coef_mu/coef_sigma are flat numeric vectors when every step was linear
+  # (learner = "linear", the default) -- reconstructed exactly as before --
+  # or a list of step objects (linear and/or spline) when learner = "spline"/
+  # "auto" was used, reconstructed via .evaluate_step() (which exactly
+  # reproduces splines::bs() from each spline step's stored knots/degree/
+  # boundary at the new x-values).
   mu_pred <- rep(object$initial_mu, n_pred)
-  for (m in seq_len(k_mu)) {
-    mu_pred <- mu_pred +
-      object$intercept_step_mu[m] +
-      object$coef_mu[m] * x_std[, object$selected_mu[m]]
+  if (is.list(object$coef_mu)) {
+    for (m in seq_len(k_mu)) {
+      step <- object$coef_mu[[m]]
+      x_m  <- x_std[, object$selected_mu[m]]
+      mu_pred <- mu_pred + .evaluate_step(step, x_m)
+    }
+  } else {
+    for (m in seq_len(k_mu)) {
+      mu_pred <- mu_pred +
+        object$intercept_step_mu[m] +
+        object$coef_mu[m] * x_std[, object$selected_mu[m]]
+    }
   }
 
   log_sigma_pred <- rep(object$initial_log_sigma, n_pred)
-  for (m in seq_len(k_sigma)) {
-    log_sigma_pred <- log_sigma_pred +
-      object$intercept_step_sigma[m] +
-      object$coef_sigma[m] * z_std[, object$selected_sigma[m]]
+  if (is.list(object$coef_sigma)) {
+    for (m in seq_len(k_sigma)) {
+      step <- object$coef_sigma[[m]]
+      z_m  <- z_std[, object$selected_sigma[m]]
+      log_sigma_pred <- log_sigma_pred + .evaluate_step(step, z_m)
+    }
+  } else {
+    for (m in seq_len(k_sigma)) {
+      log_sigma_pred <- log_sigma_pred +
+        object$intercept_step_sigma[m] +
+        object$coef_sigma[m] * z_std[, object$selected_sigma[m]]
+    }
   }
   sigma_pred <- exp(log_sigma_pred)
   

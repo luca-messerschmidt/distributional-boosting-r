@@ -41,19 +41,27 @@ summary.boost_gaussian <- function(object, ...) {
   
   # ── Location submodel ──────────────────────────────────────────────────────
   freq_mu     <- sort(table(object$selected_mu), decreasing = TRUE)
-  
-  net_mu_orig <- object$net_coef_mu_orig
-  mu_selected <- net_mu_orig[net_mu_orig != 0]
-  mu_selected <- mu_selected[order(abs(mu_selected), decreasing = TRUE)]
-  mu_zero_vars <- object$X_names[net_mu_orig == 0]
-  
+
+  # net_coef_mu_orig is NA for any variable that received a spline step (see
+  # .legacy_net_coef() in R/boosting_loop_general.R) -- a single scalar can no
+  # longer describe its effect, so those variables are excluded from both the
+  # "selected" and "zero coefficient" numeric tables below and reported
+  # separately via smooth_terms_mu instead. For learner = "linear" (the
+  # default), net_coef_mu_orig never contains NA, so this is a no-op there.
+  net_mu_orig     <- object$net_coef_mu_orig
+  net_mu_orig_lin <- net_mu_orig[!is.na(net_mu_orig)]
+  mu_selected     <- net_mu_orig_lin[net_mu_orig_lin != 0]
+  mu_selected     <- mu_selected[order(abs(mu_selected), decreasing = TRUE)]
+  mu_zero_vars    <- names(net_mu_orig_lin)[net_mu_orig_lin == 0]
+
   # ── Scale submodel — reported on original predictor scale ─────────────────
   freq_sigma        <- sort(table(object$selected_sigma), decreasing = TRUE)
-  
-  net_sigma_orig    <- object$net_coef_sigma_orig
-  sigma_selected    <- net_sigma_orig[net_sigma_orig != 0]
-  sigma_selected    <- sigma_selected[order(abs(sigma_selected), decreasing = TRUE)]
-  sigma_zero_vars   <- object$Z_names[net_sigma_orig == 0]
+
+  net_sigma_orig     <- object$net_coef_sigma_orig
+  net_sigma_orig_lin <- net_sigma_orig[!is.na(net_sigma_orig)]
+  sigma_selected     <- net_sigma_orig_lin[net_sigma_orig_lin != 0]
+  sigma_selected     <- sigma_selected[order(abs(sigma_selected), decreasing = TRUE)]
+  sigma_zero_vars    <- names(net_sigma_orig_lin)[net_sigma_orig_lin == 0]
   
   # ── Residual diagnostics ───────────────────────────────────────────────────
   res <- object$residuals
@@ -89,12 +97,14 @@ summary.boost_gaussian <- function(object, ...) {
     net_coef_mu_all      = net_mu_orig,
     mu_zero_vars         = mu_zero_vars,
     freq_mu              = freq_mu,
+    smooth_terms_mu      = object$smooth_terms_mu,
     # Scale (original predictor scale, log-sigma linear predictor)
     intercept_sigma      = object$intercept_sigma,
     net_coef_sigma       = sigma_selected,
     net_coef_sigma_all   = net_sigma_orig,
     sigma_zero_vars      = sigma_zero_vars,
     freq_sigma           = freq_sigma,
+    smooth_terms_sigma   = object$smooth_terms_sigma,
     # Residuals
     res_summary          = res_summary
   )
@@ -205,7 +215,13 @@ print.summary.boost_gaussian <- function(x, digits = 4, ...) {
           " ... and ", length(x$mu_zero_vars) - 20L, " more.\n", sep = "")
     }
   }
-  
+
+  if (!is.null(x$smooth_terms_mu)) {
+    cat("\n  Smooth terms (location) -- effect is not a single coefficient,\n")
+    cat("  see plot(fit, type = \"partial\") for the fitted curve:\n")
+    print(x$smooth_terms_mu, row.names = FALSE)
+  }
+
   # ── Scale coefficients — original predictor scale, log-sigma LP ───────────
   cat("\nScale submodel coefficients\n")
   cat("  Linear predictor : log(sigma)  [original predictor scale]\n")
@@ -233,6 +249,12 @@ print.summary.boost_gaussian <- function(x, digits = 4, ...) {
           " ... and ", length(x$sigma_zero_vars) - 20L, " more.\n", sep = "")
     }
   }
-  
+
+  if (!is.null(x$smooth_terms_sigma)) {
+    cat("\n  Smooth terms (scale) -- effect is not a single coefficient,\n")
+    cat("  see plot(fit, type = \"partial\") for the fitted curve:\n")
+    print(x$smooth_terms_sigma, row.names = FALSE)
+  }
+
   invisible(x)
 }

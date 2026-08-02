@@ -74,7 +74,12 @@ print.boost_gaussian <- function(x, digits = 4, ...) {
     print(freq_mu[seq_len(10L)])
     cat("  ... and", n_sel_mu - 10L, "more.\n")
   }
-  
+
+  if (!is.null(x$smooth_terms_mu)) {
+    cat("\n  Smooth terms (location):\n")
+    print(x$smooth_terms_mu, row.names = FALSE)
+  }
+
   # ── Scale submodel ─────────────────────────────────────────────────────────
   freq_sigma   <- sort(table(x$selected_sigma), decreasing = TRUE)
   n_sel_sigma  <- length(freq_sigma)
@@ -93,7 +98,12 @@ print.boost_gaussian <- function(x, digits = 4, ...) {
     print(freq_sigma[seq_len(10L)])
     cat("  ... and", n_sel_sigma - 10L, "more.\n")
   }
-  
+
+  if (!is.null(x$smooth_terms_sigma)) {
+    cat("\n  Smooth terms (scale):\n")
+    print(x$smooth_terms_sigma, row.names = FALSE)
+  }
+
   # ── Training fit ───────────────────────────────────────────────────────────
   r2_text <- if (is.null(x$r_squared) || is.na(x$r_squared)) {
     "NA"

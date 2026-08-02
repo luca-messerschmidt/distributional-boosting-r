@@ -12,3 +12,9 @@ generate_folds <- function(n, k, seed = NULL){
 
   sample(rep(1:k, length.out = n))
 }
+
+# Capitalizes the first letter of a string (e.g. "gamma" -> "Gamma"), used
+# for family-name labels in print()/summary() output.
+.capitalize <- function(s) {
+  paste0(toupper(substring(s, 1, 1)), substring(s, 2))
+}
