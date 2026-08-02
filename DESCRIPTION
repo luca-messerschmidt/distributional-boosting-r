@@ -5,12 +5,12 @@ Version: 0.1.0
 Authors@R: c(
     person(
       "Bjarne", "Herbst",
-      email = "jane@example.com",
+      email = "bjarne.herbst01@stud.uni-goettingen.de",
       role = c("aut", "cph", "cre")
     ),
     person(
       "Benedict", "Schnitzler",
-      email = "jane@example.com",
+      email = "b.schnitzler@stud.uni-goettingen.de",
       role = c("aut", "cph")
     ),
     person(
