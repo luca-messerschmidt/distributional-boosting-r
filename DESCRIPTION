@@ -19,13 +19,18 @@ Authors@R: c(
       role = c("aut", "cph")
     )
   )
-Description: Implements a simple component-wise gradient boosting algorithm for
-    Gaussian location-scale models with prediction, plotting, printing, and
-    summary methods.
+Description: Implements a component-wise gradient boosting algorithm for
+    Gaussian location-scale models, as well as Gamma, Poisson, and Binomial
+    response families, with linear or P-spline base learners, prediction,
+    plotting, printing, and summary methods.
 License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.3.3
-Suggests: 
+Imports:
+    stats,
+    graphics,
+    splines
+Suggests:
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
