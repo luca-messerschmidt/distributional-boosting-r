@@ -1,15 +1,10 @@
 # ── Shared internal engine for boost_gamma()/boost_poisson()/boost_binomial() ──
-#
-# boost_gaussian() keeps its own hand-written body (untouched beyond
-# delegating to .run_boosting_loop_general(), so its output stays exactly
-# what it was before). The three new distributional entry points share this
-# engine instead of duplicating boost_gaussian()'s validation/standardisation/
-# post-fit logic three times; each wrapper only does its own family-specific
-# y-domain validation and argument assembly before calling .boost_dist_fit().
+# boost_gaussian() keeps its own hand-written body; boost_gamma/poisson/
+# binomial share this engine instead of duplicating its validation/
+# standardisation/post-fit logic three times.
 
-# Generalizes .parse_mstop() (boost_gaussian.R) to an arbitrary number of
-# named parameters. Returns a named list of integer mstops keyed by
-# `param_names`.
+# Like .parse_mstop() but for an arbitrary number of named parameters.
+# Returns a named list of integer mstops keyed by `param_names`.
 .parse_mstop_general <- function(mstop, method, param_names) {
   err <- function() {
     stop("mstop must be a single positive integer, or (for method = ",
@@ -45,12 +40,10 @@
   err()
 }
 
-# Generalizes .build_design_from_formula() (boost_gaussian.R) to families
-# with any number of parameters. For a single-parameter family, `formula`
-# must be a plain two-sided formula (e.g. y ~ x1 + x2). For a two-parameter
-# family, `formula` must be a list with one component per parameter, the
-# first two-sided (establishing y) and the rest one-sided (e.g.
-# list(mu = y ~ x1, shape = ~ z1)).
+# Like .build_design_from_formula() but for any number of parameters. A
+# single-parameter family takes a plain two-sided formula (y ~ x1 + x2); a
+# two-parameter family takes a list with one component per parameter, the
+# first two-sided and the rest one-sided (list(mu = y ~ x1, shape = ~ z1)).
 .build_design_from_formula_general <- function(formula, data, param_names) {
   if (is.null(data) || !is.data.frame(data)) {
     stop("data must be a data.frame when formula is supplied.", call. = FALSE)
@@ -109,8 +102,7 @@
   list(designs = designs, y = as.numeric(y), terms = terms_list)
 }
 
-# Generalizes .early_stop_search() (boost_gaussian.R) to any family/parameter
-# count, reusing .run_boosting_loop_general()'s validation-tracking support.
+# Like .early_stop_search() but for any family/parameter count.
 .early_stop_search_general <- function(designs, y, family, nus, mstop_max,
                                         method, validation_split, patience,
                                         seed, learner) {
@@ -165,11 +157,9 @@
        n_val = n_val, mstop_max = mstop_max)
 }
 
-# The shared fitting engine: standardises `designs`, optionally runs the
-# early-stopping search, fits the generalized boosting loop, and aggregates
-# net coefficients per parameter (via .legacy_net_coef(), reused from
-# boosting_loop_general.R). `designs`/`nus` are named lists keyed by
-# `family$parameters`.
+# Standardises `designs`, optionally runs the early-stopping search, fits
+# the generalized boosting loop, and aggregates net coefficients per
+# parameter. `designs`/`nus` are named lists keyed by `family$parameters`.
 .boost_dist_fit <- function(designs, y, family, nus, mstop,
                             method = c("cyclic", "noncyclic"),
                             patience = NULL, validation_split = 0.2,
@@ -279,11 +269,9 @@
 }
 
 # Assembles the public result list returned by boost_gamma()/boost_poisson()/
-# boost_binomial() from a `.boost_dist_fit()` core, in a family-agnostic
-# shape (named lists keyed by family$parameters throughout) that
-# predict.boost_dist()/print.boost_dist()/summary.boost_dist()/
-# plot.boost_dist() (added in a later phase) can consume without knowing how
-# many parameters the family has.
+# boost_binomial() from a .boost_dist_fit() core, keyed by family$parameters
+# throughout so predict/print/summary/plot.boost_dist() don't need to know
+# how many parameters the family has.
 .assemble_boost_dist_result <- function(core, terms_list, call) {
   family <- core$family
   P      <- core$parameters

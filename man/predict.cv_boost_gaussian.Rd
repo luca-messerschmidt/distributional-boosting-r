@@ -9,9 +9,11 @@
 \arguments{
 \item{object}{object of class "cv_boost_gaussian"}
 
-\item{...}{further parameters for the prediction}
+\item{newdata_X}{new location predictor data}
 
-\item{newdata}{new data for the prediction}
+\item{newdata_Z}{new scale predictor data}
+
+\item{...}{further parameters for the prediction}
 }
 \value{
 numeric prediction-vector

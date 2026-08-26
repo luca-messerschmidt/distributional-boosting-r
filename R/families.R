@@ -1,24 +1,13 @@
 # ── Family objects for distributional gradient boosting ─────────────────────
-#
-# A "family" is a plain list describing a distribution with one or more
-# parameters, each boosted on its own link-scale linear predictor:
-#   name       - character label (e.g. "gaussian")
-#   parameters - character vector of parameter names, in update order
-#   link       - named list of link functions (response scale -> link scale),
-#                used only at initialisation
-#   invlink    - named list of inverse-link functions (link scale -> response
-#                scale), applied every round to turn the accumulated linear
-#                predictor into the current parameter estimate
-#   ngradient  - named list of functions(y, par) returning d(loglik)/d(eta_k)
-#                for parameter k, i.e. the NEGATIVE gradient of that
-#                parameter's contribution to the negative log-likelihood
-#                (this is what boosting fits against each round)
-#   risk       - function(y, par) returning the total negative log-likelihood
-#   init       - function(y) returning a named list of response-scale
-#                starting values (one constant vector per parameter)
-#
-# `par` (as passed to ngradient/risk) is always a named list of response-scale
-# parameter vectors, e.g. list(mu = ..., sigma = ...) for a 2-parameter family.
+# A family is a plain list, one parameter of the distribution boosted per
+# link-scale linear predictor:
+#   name, parameters (character vector, in update order)
+#   link/invlink   - response scale <-> link scale, per parameter
+#   ngradient      - function(y, par), d(loglik)/d(eta_k), fit each round
+#   risk           - function(y, par), total negative log-likelihood
+#   init           - function(y), starting values per parameter
+# `par` is always a named list of response-scale values, e.g.
+# list(mu = ..., sigma = ...) for a 2-parameter family.
 
 .sd_safe <- function(y) {
   s <- stats::sd(y)
@@ -55,8 +44,10 @@
 # d(loglik)/d(eta_mu)    = mu * d(loglik)/d(mu) = shape * (y/mu - 1)         [eta_mu = log(mu)]
 # d(loglik)/d(shape)     = log(shape) + 1 - digamma(shape) - log(mu) + log(y) - y/mu
 # d(loglik)/d(eta_shape) = shape * d(loglik)/d(shape)                        [eta_shape = log(shape)]
-# Requires y > 0.
+# Requires y > 0. `mu` is clipped away from 0 before risk is computed to
+# avoid a non-finite log-density.
 .family_gamma <- function() {
+  eps <- 1e-10
   list(
     name       = "gamma",
     parameters = c("mu", "shape"),
@@ -70,7 +61,8 @@
       }
     ),
     risk = function(y, par) {
-      -sum(stats::dgamma(y, shape = par$shape, rate = par$shape / par$mu,
+      mu <- pmax(par$mu, eps)
+      -sum(stats::dgamma(y, shape = par$shape, rate = par$shape / mu,
                           log = TRUE))
     },
     init = function(y) {
@@ -89,8 +81,10 @@
 # log f(y) = y*log(mu) - mu - log(y!)
 # d(loglik)/d(mu) = y/mu - 1; d(mu)/d(eta) = mu (eta = log(mu))
 # d(loglik)/d(eta) = mu*(y/mu - 1) = y - mu
-# Requires y >= 0.
+# Requires y >= 0. `mu` is clipped away from 0 before risk is computed to
+# avoid a non-finite log-density.
 .family_poisson <- function() {
+  eps <- 1e-10
   list(
     name       = "poisson",
     parameters = c("mu"),
@@ -98,7 +92,8 @@
     invlink    = list(mu = exp),
     ngradient  = list(mu = function(y, par) y - par$mu),
     risk = function(y, par) {
-      -sum(stats::dpois(y, lambda = par$mu, log = TRUE))
+      mu <- pmax(par$mu, eps)
+      -sum(stats::dpois(y, lambda = mu, log = TRUE))
     },
     init = function(y) {
       n <- length(y)

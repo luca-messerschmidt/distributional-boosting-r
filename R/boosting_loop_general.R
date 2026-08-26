@@ -1,21 +1,13 @@
 # ── Generalized component-wise base learner selection ────────────────────────
-#
 # Fits candidate base learners to every column of `design` against target
-# `u`, and returns the single (column, learner-type) combination with the
-# lowest residual sum of squares. `learner` controls which candidate types
-# are tried:
-#   "linear" - one simple linear (intercept + slope) candidate per column
-#              (identical in behavior to the package's original
-#              .best_base_learner(); this is the only path boost_gaussian()
-#              exercises by default, so it costs nothing extra)
-#   "spline" - one df-equalized P-spline candidate per column (needs
-#              spline_cache_k, as built by .build_spline_cache())
-#   "auto"   - both candidates per column, true RSS-best-of-both selection
-# The returned list always includes `fitted` (the candidate's raw, un-nu-
-# scaled prediction on `design`'s rows), used by the boosting loop to update
-# the linear predictor with the exact same "nu * (a + b*x)"-style expression
-# the original implementation used, keeping the linear/default path
-# numerically identical to before.
+# `u` and returns the (column, learner-type) with the lowest RSS. `learner`
+# picks which candidates are tried per column:
+#   "linear" - one linear (intercept + slope) candidate
+#   "spline" - one df-equalized P-spline candidate (needs spline_cache_k,
+#              built by .build_spline_cache())
+#   "auto"   - both, true RSS-best-of-both
+# `fitted` in the returned list is the candidate's raw prediction (before
+# scaling by nu), used to update the linear predictor.
 .best_base_learner_general <- function(design, u, learner = "linear",
                                         spline_cache_k = NULL) {
   best_rss <- Inf
@@ -59,10 +51,8 @@
 }
 
 # Bakes `nu` into a candidate's stored slope/intercept (linear) or basis
-# coefficients (spline), mirroring how the original implementation always
-# stored nu-scaled coefficients (coef_mu[round] <- nu_mu * best$slope) so
-# that later reconstruction (predict(), validation stepping) is "just apply
-# the stored numbers" with no separate nu bookkeeping.
+# coefficients (spline), so predict() can just apply the stored numbers
+# without separate nu bookkeeping.
 .scale_step <- function(best, nu) {
   if (best$type == "linear") {
     list(type = "linear", var = best$var,
@@ -74,17 +64,10 @@
   }
 }
 
-# Aggregates one parameter's per-step history (`coef_k`, as returned in
-# .run_boosting_loop_general()'s `coef` field) into the legacy net-coefficient
-# representation consumers like boost_gaussian() expect: a named numeric
-# vector (one entry per variable in `var_names`) plus the total intercept
-# drift accumulated across steps. When `coef_k` is a flat numeric vector
-# (learner == "linear", every step for this parameter was linear), this
-# reproduces the original tapply()-based aggregation exactly. When `coef_k`
-# is a list of step objects (any spline step present), variables that ever
-# received a spline step get NA (a single scalar can no longer describe
-# their effect -- see the smooth-terms reporting added in a later phase) and
-# the intercept total only includes linear steps' intercepts.
+# Aggregates one parameter's per-step history into a named net-coefficient
+# vector (one entry per variable) plus the total intercept drift. Variables
+# that ever received a spline step get NA instead of a slope sum, since a
+# single scalar can't describe a smooth effect (see .smooth_terms_table()).
 .legacy_net_coef <- function(coef_k, intercept_step_k, selected_k, var_names) {
   if (!is.list(coef_k)) {
     net_std <- tapply(coef_k, selected_k, sum)
@@ -114,16 +97,12 @@
 }
 
 # ── Generalized boosting loop, driven by a family object ────────────────────
-#
 # designs/nus/mstops are named lists keyed by family$parameters (e.g.
-# list(mu = X_std, sigma = Z_std) for a 2-parameter family, or
-# list(mu = X_std) for a 1-parameter family) -- no parameter count is
-# hardcoded anywhere in this function. Supports method = "cyclic" (every
-# parameter is updated each round, until its own mstops[[k]] budget is
-# exhausted) and "noncyclic" (each round updates only whichever parameter's
-# candidate step yields the largest risk decrease). Optional validation
-# tracking (val_designs + val_y) enables early stopping via `patience`,
-# mirroring boost_gaussian()'s original .run_boosting_loop().
+# list(mu = X_std, sigma = Z_std) for 2 parameters, list(mu = X_std) for 1).
+# method = "cyclic" updates every parameter each round until its own
+# mstops[[k]] budget is used up; "noncyclic" updates only whichever
+# parameter's candidate step gives the largest risk decrease. Validation
+# tracking (val_designs + val_y) enables early stopping via `patience`.
 .run_boosting_loop_general <- function(designs, y, family, nus, mstops, method,
                                         val_designs = NULL, val_y = NULL,
                                         patience = NULL, learner = "linear") {
@@ -141,22 +120,16 @@
     val_par <- stats::setNames(lapply(P, function(k) family$invlink[[k]](val_eta[[k]])), P)
   }
 
-  # spline_cache[[k]] is only built (once, before the round loop) when a
-  # spline candidate can actually be selected for parameter k; left empty for
-  # learner == "linear" so the linear/default path pays zero extra cost.
+  # only built when a spline candidate is actually usable, so learner =
+  # "linear" pays nothing extra
   spline_cache <- stats::setNames(vector("list", length(P)), P)
   if (learner %in% c("spline", "auto")) {
     for (k in P) spline_cache[[k]] <- .build_spline_cache(designs[[k]])
   }
 
-  # `steps[[k]]` always holds the internal, uniform list-of-step-objects
-  # representation (each a linear or spline step, as returned by
-  # .scale_step()); `selected`/`roundv` stay flat (a step's chosen variable
-  # name / round is always a scalar, regardless of learner type). At the very
-  # end, `steps` is collapsed back into flat `coef`/`intercept_step` numeric
-  # vectors whenever every step for a parameter is linear -- which is always
-  # true for learner == "linear" -- reproducing the original flat-vector
-  # field structure exactly for that (default) case.
+  # steps[[k]] holds each step as a step object (.scale_step()); collapsed
+  # back into flat coef/intercept_step vectors at the end when every step
+  # for a parameter is linear.
   selected <- roundv <- steps <-
     stats::setNames(vector("list", length(P)), P)
   for (k in P) {
@@ -180,14 +153,9 @@
   log_intercept <- numeric(0)
   log_round     <- integer(0)
 
-  # Fits and applies one base-learner step for parameter `k` at `round`,
-  # updating eta/par/selected/steps/roundv (and the validation accumulators,
-  # if tracked) and the shared step_log vectors, all via <<- into this call's
-  # enclosing environment. The eta/val_eta updates use best$fitted (the raw,
-  # un-scaled candidate prediction) multiplied by nu as a single expression
-  # -- "nu * (a + b*x)" for a linear candidate -- exactly matching the
-  # original implementation's arithmetic so the linear/default path is
-  # numerically unchanged.
+  # Fits and applies one base-learner step for parameter `k`, updating
+  # eta/par/selected/steps/roundv (and validation accumulators, if tracked)
+  # via <<- into the enclosing environment.
   .apply_step <- function(k, round) {
     u    <- family$ngradient[[k]](y, par)
     best <- .best_base_learner_general(designs[[k]], u, learner, spline_cache[[k]])
@@ -338,14 +306,8 @@
     stringsAsFactors = FALSE
   )
 
-  # Collapse `steps[[k]]` back into flat numeric `coef`/`intercept_step`
-  # vectors whenever every step for parameter k is linear (always true when
-  # learner == "linear", the only path boost_gaussian() exercises by
-  # default) -- reproducing the original flat-vector field structure
-  # exactly. When any step is a spline step, `coef[[k]]` is instead the full
-  # list of step objects (mixed linear/spline, in "auto" mode) and
-  # `intercept_step[[k]]` is NA (no longer a meaningful flat scalar; readers
-  # needing per-step detail should use the step objects in `coef[[k]]`).
+  # collapse steps[[k]] into flat coef/intercept_step vectors when every
+  # step is linear; otherwise coef[[k]] keeps the full step-object list
   coef <- intercept_step <- stats::setNames(vector("list", length(P)), P)
   for (k in P) {
     steps_k <- steps[[k]]
