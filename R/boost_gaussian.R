@@ -261,22 +261,14 @@ boost_gaussian <- function(X = NULL, Z = NULL, y = NULL, formula = NULL,
                                2L, Z_scale, "/"))
 
   # ── Initialisation ────────────────────────────────────────────────────────────
-  y_sd <- sd(y)
-  if (!is.finite(y_sd) || y_sd == 0) y_sd <- 1
+  y_sd <- .sd_safe(y)
 
   # ── Family + generalized boosting loop ──────────────────────────────────────
-  # boost_gaussian() is a thin wrapper around the family-driven generalized
-  # engine: it builds the 2-parameter Gaussian family object (mu, sigma) and
-  # delegates to .run_boosting_loop_general(), then translates the result
-  # back into this function's field names below. Per-step history is
-  # recorded per submodel (selected_*, coef_*, intercept_step_*), in the
-  # order each submodel's steps were actually applied, together with the
-  # GLOBAL round at which each step happened (round_*). For the classic
-  # single-mstop cyclic case round_mu == round_sigma == seq_len(mstop),
-  # reproducing the original algorithm exactly. For noncyclic / two-mstop-
-  # cyclic, round_mu and round_sigma can differ in length and have gaps,
-  # which is how predict()/plot() reconstruct partial fits correctly
-  # regardless of update schedule.
+  # Builds the 2-parameter Gaussian family object and delegates to
+  # .run_boosting_loop_general(). Per-step history is recorded per submodel
+  # (selected_*, coef_*, intercept_step_*) together with the global round at
+  # which each step happened (round_*), so predict()/plot() can reconstruct
+  # partial fits regardless of update schedule (two-mstop cyclic, noncyclic).
   family <- .family_gaussian()
 
   fit_state <- .run_boosting_loop_general(
@@ -307,10 +299,8 @@ boost_gaussian <- function(X = NULL, Z = NULL, y = NULL, formula = NULL,
   r_squared <- if (tss == 0) NA_real_ else 1 - sum(residuals^2) / tss
 
   # ── Net coefficients: standardised scale ────────────────────────────────────
-  # When learner == "linear" (the default), .legacy_net_coef() reproduces the
-  # original tapply()-based aggregation exactly. When a variable received a
-  # spline step (learner == "spline"/"auto"), its net coefficient can no
-  # longer be described by a single number and is reported as NA instead.
+  # A variable that received a spline step gets NA instead of a slope, since
+  # a single number can't describe a smooth effect.
   agg_mu    <- .legacy_net_coef(coef_mu, intercept_step_mu, selected_mu, names(X_std))
   agg_sigma <- .legacy_net_coef(coef_sigma, intercept_step_sigma, selected_sigma, names(Z_std))
 
@@ -477,14 +467,10 @@ boost_gaussian <- function(X = NULL, Z = NULL, y = NULL, formula = NULL,
 
 # ── Internal: early stopping search ─────────────────────────────────────────
 
-# Splits (X, Z, y) into a train/validation partition, runs the boosting loop
-# on the train partition up to mstop_max rounds while tracking validation
-# risk after every round (using the SAME per-round base-learner updates,
-# applied to the standardised validation design), and stops early once
-# `patience` rounds pass without validation-risk improvement. Returns only
-# the round count that achieved the best validation risk (plus the trace) —
-# the throwaway train-only fit itself is discarded; the calling boost_gaussian()
-# refits on the full data at that round count.
+# Splits (X, Z, y) into train/validation, boosts on the train part up to
+# mstop_max rounds while tracking validation risk each round, and stops
+# early once `patience` rounds pass without improvement. Only the best
+# round count is returned; boost_gaussian() refits on the full data itself.
 .early_stop_search <- function(X, Z, y, mstop_max, nu_mu, nu_sigma, method,
                                validation_split, patience, seed,
                                learner = "linear") {

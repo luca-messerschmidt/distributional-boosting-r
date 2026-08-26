@@ -131,15 +131,18 @@ plot.boost_gaussian <- function(x,
     }
   }
 
+  if (is.list(coefs)) {
+    stop("type = \"path\" only supports linear-only submodels; use ",
+         "type = \"partial\" to visualise a submodel containing spline steps.",
+         call. = FALSE)
+  }
+
   p       <- length(vars)
   n_steps <- length(selected)
 
-  # Build cumulative path matrix on the STANDARDISED scale first. Columns
-  # correspond to this submodel's own steps (n_steps, not the shared
-  # `mstop`), each tagged with the global round it occurred at (`rounds`) so
-  # the path can be plotted against the shared boosting-iteration axis even
-  # when a submodel was updated less often or irregularly (two-mstop cyclic,
-  # noncyclic).
+  # cumulative path on the standardised scale; columns are this submodel's
+  # own steps, tagged with the global round (`rounds`) for plotting against
+  # the shared iteration axis
   path_std <- matrix(0, nrow = p, ncol = max(n_steps, 1L),
                      dimnames = list(vars, paste0("m", seq_len(max(n_steps, 1L)))))
 
@@ -245,14 +248,9 @@ plot.boost_gaussian <- function(x,
 }
 
 # ── Internal: partial-effect plot ─────────────────────────────────────────────
-#
-# Plots one variable's accumulated fitted effect (linear and/or spline steps
-# that ever selected it) across its observed range -- a straight line if
-# every step for that variable was linear, a curve if any were spline steps.
-# Uses .compute_partial_effect() (R/learner_spline.R), which reconstructs the
-# effect via .evaluate_step() from the stored per-step coefficients/basis
-# information, so this works identically for boost_gaussian() and the
-# boost_dist family (Gamma/Poisson/Binomial) submodels.
+# Plots one variable's accumulated fitted effect across its observed range:
+# a straight line if every step for it was linear, a curve if any were
+# spline steps. Uses .compute_partial_effect() (R/learner_spline.R).
 .plot_boost_partial <- function(selected_k, coef_k, intercept_step_k, x_std,
                                 center_k, scale_k, variable, param_label,
                                 n_grid = 100, ...) {

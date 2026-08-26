@@ -155,21 +155,15 @@ predict.boost_gaussian <- function(object,
     return(.format_predict_output(mu_pred, sigma_pred, what))
   }
   
-  # General reconstruction (used for early stopping in- and out-of-sample, and
-  # for the full out-of-sample model): accumulate per-step intercept + slope.
-  # k_mu/k_sigma are the number of each submodel's steps that occurred within
-  # the first m_use rounds — equal to m_use itself in the classic single-mstop
-  # cyclic case, but can differ once submodels have separate budgets or the
-  # update schedule is non-cyclic.
+  # General reconstruction (early stopping, or the full out-of-sample model):
+  # accumulate per-step intercept + slope. k_mu/k_sigma are the number of
+  # each submodel's steps within the first m_use rounds; equal to m_use in
+  # the classic single-mstop cyclic case, but can differ otherwise.
   k_mu    <- sum(object$round_mu    <= m_use)
   k_sigma <- sum(object$round_sigma <= m_use)
 
-  # coef_mu/coef_sigma are flat numeric vectors when every step was linear
-  # (learner = "linear", the default) -- reconstructed exactly as before --
-  # or a list of step objects (linear and/or spline) when learner = "spline"/
-  # "auto" was used, reconstructed via .evaluate_step() (which exactly
-  # reproduces splines::bs() from each spline step's stored knots/degree/
-  # boundary at the new x-values).
+  # coef_mu/coef_sigma are flat vectors when every step was linear, or a
+  # list of step objects when learner = "spline"/"auto" was used
   mu_pred <- rep(object$initial_mu, n_pred)
   if (is.list(object$coef_mu)) {
     for (m in seq_len(k_mu)) {

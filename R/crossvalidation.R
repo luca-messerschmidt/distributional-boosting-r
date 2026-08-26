@@ -20,32 +20,48 @@
 cv_boost_gaussian <- function(X, Z, y, k = 5, mstop = 100, nu_mu = 0.1,
                               nu_sigma = 0.1, method = "cyclic", seed = NULL,
                               folds = NULL, patience_cv = NULL,
-                              learner = "linear"){
+                              learner = "linear") {
   # check input dimensions
   n <- length(y)
-  if (nrow(X) != n){stop("Number of rows in X must match length of y")}
-  if (nrow(Z) != n){stop("Number of rows in Z must match length of y")}
-  if (k <= 1){stop("k must be greater than 1")}
-  if (k > n){stop("k must be smaller than sample size n")}
+  if (nrow(X) != n) stop("Number of rows in X must match length of y", call. = FALSE)
+  if (nrow(Z) != n) stop("Number of rows in Z must match length of y", call. = FALSE)
+  if (!is.numeric(k) || length(k) != 1L || k != as.integer(k)) {
+    stop("k must be a single integer.", call. = FALSE)
+  }
+  if (k <= 1) stop("k must be greater than 1", call. = FALSE)
+  if (k > n) stop("k must be smaller than sample size n", call. = FALSE)
   if (!is.numeric(mstop) || length(mstop) != 1L || mstop < 1 ||
-      mstop != as.integer(mstop)){
-    stop("mstop must be a single positive integer, separate mu/sigma budgets are not supported in cross-validation")
+      mstop != as.integer(mstop)) {
+    stop("mstop must be a single positive integer, separate mu/sigma budgets are not supported in cross-validation",
+         call. = FALSE)
+  }
+  if (!is.numeric(nu_mu) || length(nu_mu) != 1L || nu_mu <= 0 || nu_mu > 1) {
+    stop("nu_mu must be a single value in (0, 1].", call. = FALSE)
+  }
+  if (!is.numeric(nu_sigma) || length(nu_sigma) != 1L || nu_sigma <= 0 ||
+      nu_sigma > 1) {
+    stop("nu_sigma must be a single value in (0, 1].", call. = FALSE)
+  }
+  if (!is.null(patience_cv) && (!is.numeric(patience_cv) ||
+      length(patience_cv) != 1L || patience_cv < 1 ||
+      patience_cv != as.integer(patience_cv))) {
+    stop("patience_cv must be a single positive integer.", call. = FALSE)
   }
 
-  if (is.null(folds)){
+  if (is.null(folds)) {
     # set a seed if provided
     if (!is.null(seed)) set.seed(seed)
     # create random folds
     folds <- generate_folds(n, k)
   } else {
-    if (length(folds) != n){
-      stop("folds must be same length as y")
+    if (length(folds) != n) {
+      stop("folds must be same length as y", call. = FALSE)
     }
-    if (!all(folds %in% seq_len(k))){
-      stop("folds must only contain integer values from 1 to k")
+    if (!all(folds %in% seq_len(k))) {
+      stop("folds must only contain integer values from 1 to k", call. = FALSE)
     }
-    if (length(unique(folds)) != k){
-      stop("folds must contain all fold-indices from 1 to k")
+    if (length(unique(folds)) != k) {
+      stop("folds must contain all fold-indices from 1 to k", call. = FALSE)
     }
   }
 
@@ -55,7 +71,7 @@ cv_boost_gaussian <- function(X, Z, y, k = 5, mstop = 100, nu_mu = 0.1,
   for (i in 1:k) {
     # split into train and test
     train_X <- X[folds != i, , drop = FALSE]
-    train_Z <- Z[folds!= i, , drop = FALSE]
+    train_Z <- Z[folds != i, , drop = FALSE]
     train_y <- y[folds != i]
     test_X <- X[folds == i, , drop = FALSE]
     test_Z <- Z[folds == i, , drop = FALSE]
@@ -69,7 +85,7 @@ cv_boost_gaussian <- function(X, Z, y, k = 5, mstop = 100, nu_mu = 0.1,
     best_error <- Inf
     no_improve <- 0
 
-    for (m in 1:mstop){
+    for (m in 1:mstop) {
       prediction <- predict(fit, newdata_X = test_X, newdata_Z = test_Z,
                             mstop = m, what = "both")
       cv_errors[i, m] <- mean(
@@ -78,7 +94,7 @@ cv_boost_gaussian <- function(X, Z, y, k = 5, mstop = 100, nu_mu = 0.1,
         )
 
       # early stopping algorithm
-      if (cv_errors[i, m] < best_error){
+      if (cv_errors[i, m] < best_error) {
         best_error <- cv_errors[i, m]
         no_improve <- 0
       }
@@ -120,20 +136,19 @@ cv_boost_gaussian <- function(X, Z, y, k = 5, mstop = 100, nu_mu = 0.1,
 #' @param x object of class "cv_boost_gaussian"
 #' @param ... other parameters for the plot() function
 #'
-#' @importFrom graphics abline legend
-#'
 #' @export
-plot.cv_boost_gaussian <- function(x, ...){
+plot.cv_boost_gaussian <- function(x, ...) {
   m <- 1:x$mstop_max
-  plot(m, x$mean_error_cv, type = "l", col = "blue", lwd = 2,
-       xlab = "Boosting Iterations",
-       ylab = "Negative Log-Likelihood",
-       main = "Hyperparameter Tuning of mstop")
-  abline(v = x$optimal_stop, col = "red", lty = 2)
-  legend("topright",
-         legend = c("CV Error",paste("Optimal mstop:", x$optimal_stop)),
-         col = c("blue", "red"),
-         lty = 1:2)
+  graphics::plot(m, x$mean_error_cv, type = "l", col = "blue", lwd = 2,
+                 xlab = "Boosting Iterations",
+                 ylab = "Negative Log-Likelihood",
+                 main = "Hyperparameter Tuning of mstop")
+  graphics::abline(v = x$optimal_stop, col = "red", lty = 2)
+  graphics::legend("topright",
+                   legend = c("CV Error", paste("Optimal mstop:", x$optimal_stop)),
+                   col = c("blue", "red"),
+                   lty = 1:2)
+  invisible(x)
 }
 
 
@@ -143,7 +158,7 @@ plot.cv_boost_gaussian <- function(x, ...){
 #' @param ... other parameters for the print() function
 #'
 #' @export
-print.cv_boost_gaussian <- function(x, ...){
+print.cv_boost_gaussian <- function(x, ...) {
   cat("\nCall:\n", paste(deparse(x$call), sep = "\n", collapse = "\n"),
       "\n\n", sep = "")
 
@@ -162,7 +177,7 @@ print.cv_boost_gaussian <- function(x, ...){
 #'
 #' @returns list of values for model summary
 #' @export
-summary.cv_boost_gaussian <- function(object, ...){
+summary.cv_boost_gaussian <- function(object, ...) {
 
   res <- list(
     call = object$call,
@@ -184,7 +199,7 @@ summary.cv_boost_gaussian <- function(object, ...){
 #' @param ... other parameters passed
 #'
 #' @export
-print.summary.cv_boost_gaussian <- function(x, ...){
+print.summary.cv_boost_gaussian <- function(x, ...) {
   cat("\nCall:\n", paste(deparse(x$call), sep = "\n", collapse = "\n"),
       "\n\n", sep = "")
   cat("Optimal mstop:", x$optimal_stop, "\n\n")
@@ -194,20 +209,22 @@ print.summary.cv_boost_gaussian <- function(x, ...){
   print(x$coefficients_mu)
   cat("\nCoefficients (scale):\n")
   print(x$coefficients_sigma)
+  invisible(x)
 }
 
 #' predict-method for CV Function "cv_boost_gaussian"
 #'
 #' @param object object of class "cv_boost_gaussian"
-#' @param newdata new data for the prediction
+#' @param newdata_X new location predictor data
+#' @param newdata_Z new scale predictor data
 #' @param ... further parameters for the prediction
 #'
 #' @importFrom stats predict
 #' @returns numeric prediction-vector
 #' @export
 predict.cv_boost_gaussian <- function(object, newdata_X = NULL,
-                                      newdata_Z = NULL, ...){
-  if(is.null(newdata_X) && is.null(newdata_Z)){
+                                      newdata_Z = NULL, ...) {
+  if (is.null(newdata_X) && is.null(newdata_Z)) {
     return(object$model$fitted_mu)
   }
   return(predict(object$model, newdata_X = newdata_X, newdata_Z = newdata_Z,
@@ -243,33 +260,36 @@ cv_boost_grid <- function(X, Z, y, k = 5, mstop_grid = 200,
                           nu_sigma_grid = c(0.01, 0.1, 0.3),
                           method = "cyclic",
                           learner_grid = "linear",
-                          seed = NULL){
+                          seed = NULL) {
 
   n <- length(y)
-  if (nrow(X) != n) stop("Number of rows in X must match length of y")
-  if (nrow(Z) != n) stop("Number of rows in Z must match length of y")
-  if (k<=1) stop("number of folds must be greater than 1")
-  if (k > n) stop("number of folds must be smaller than sample size")
+  if (nrow(X) != n) stop("Number of rows in X must match length of y", call. = FALSE)
+  if (nrow(Z) != n) stop("Number of rows in Z must match length of y", call. = FALSE)
+  if (!is.numeric(k) || length(k) != 1L || k != as.integer(k)) {
+    stop("k must be a single integer.", call. = FALSE)
+  }
+  if (k<=1) stop("number of folds must be greater than 1", call. = FALSE)
+  if (k > n) stop("number of folds must be smaller than sample size", call. = FALSE)
 
   if (!is.numeric(mstop_grid) || length(mstop_grid) == 0L ||
-      any(mstop_grid < 1) || any(mstop_grid != as.integer(mstop_grid))){
-    stop("mstop_grid must be a non_empty vector of positive integers")
+      any(mstop_grid < 1) || any(mstop_grid != as.integer(mstop_grid))) {
+    stop("mstop_grid must be a non_empty vector of positive integers", call. = FALSE)
   }
-  if (!is.numeric(nu_mu_grid) || any(nu_mu_grid > 1) || any(nu_mu_grid <= 0)||
-      length(nu_mu_grid) == 0){
-    stop("nu_mu_grid must be non-empty vector of values in (0,1]")
+  if (!is.numeric(nu_mu_grid) || any(nu_mu_grid > 1) || any(nu_mu_grid <= 0) ||
+      length(nu_mu_grid) == 0) {
+    stop("nu_mu_grid must be non-empty vector of values in (0,1]", call. = FALSE)
   }
   if (!is.numeric(nu_sigma_grid) || any(nu_sigma_grid > 1) ||
-      any(nu_sigma_grid <= 0)|| length(nu_sigma_grid) == 0){
-    stop("nu_sigma_grid must be non-empty vector of values in (0,1]")
+      any(nu_sigma_grid <= 0) || length(nu_sigma_grid) == 0) {
+    stop("nu_sigma_grid must be non-empty vector of values in (0,1]", call. = FALSE)
   }
   if (!is.character(learner_grid) || length(learner_grid) == 0L ||
-      !all(learner_grid %in% c("linear", "spline", "auto"))){
+      !all(learner_grid %in% c("linear", "spline", "auto"))) {
     stop("learner_grid must be a non-empty vector with values in ",
-         "c('linear', 'spline', 'auto')")
+         "c('linear', 'spline', 'auto')", call. = FALSE)
   }
 
-  if(!is.null(seed)) set.seed(seed)
+  if (!is.null(seed)) set.seed(seed)
   folds <- generate_folds(n, k)
 
   results <- expand.grid(mstop = mstop_grid, nu_mu = nu_mu_grid,
@@ -278,7 +298,7 @@ cv_boost_grid <- function(X, Z, y, k = 5, mstop_grid = 200,
   results$cv_error <- NA
   results$optimal_stop <- NA
 
-  for (i in seq_len(nrow(results))){
+  for (i in seq_len(nrow(results))) {
     cv_fit <- cv_boost_gaussian(X, Z, y, k = k,
                                 mstop = results$mstop[i],
                                 nu_mu = results$nu_mu[i],
@@ -316,7 +336,7 @@ cv_boost_grid <- function(X, Z, y, k = 5, mstop_grid = 200,
 #' @param ... other parameters for the print() function
 #'
 #' @export
-print.cv_boost_grid <- function(x, ...){
+print.cv_boost_grid <- function(x, ...) {
   cat("\nCall:\n", paste(deparse(x$call), sep = "\n", collapse = "\n"),
       "\n\n", sep = "")
 
@@ -332,7 +352,7 @@ print.cv_boost_grid <- function(x, ...){
 #'
 #' @returns list with sorted grid results and best combination
 #' @export
-summary.cv_boost_grid <- function(object, ...){
+summary.cv_boost_grid <- function(object, ...) {
   res <- list(
     call = object$call,
     best_combination = object$best_combination,
@@ -349,11 +369,12 @@ summary.cv_boost_grid <- function(object, ...){
 #' @param ... other parameters passed
 #'
 #' @export
-print.summary.cv_boost_grid <- function(x, ...){
+print.summary.cv_boost_grid <- function(x, ...) {
   cat("All combinations: \n")
   print(x$sorted_results)
   cat("\nBest combination:\n")
   print(x$best_combination)
+  invisible(x)
 }
 
 #' predict-method for CV Function "cv_boost_grid"
@@ -367,8 +388,8 @@ print.summary.cv_boost_grid <- function(x, ...){
 #' @returns numeric prediction-vector
 #' @export
 predict.cv_boost_grid <- function(object, newdata_X = NULL,
-                                  newdata_Z = NULL, ...){
-  if(is.null(newdata_X) && is.null(newdata_Z)){
+                                  newdata_Z = NULL, ...) {
+  if (is.null(newdata_X) && is.null(newdata_Z)) {
     return(object$final_model$fitted_mu)
   }
 

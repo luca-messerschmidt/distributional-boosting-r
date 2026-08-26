@@ -126,6 +126,11 @@ print.summary.boost_dist <- function(x, digits = 4, ...) {
   cat(rep("-", 55), "\n", sep = "")
   cat("Call:\n  ", deparse(x$call), "\n\n", sep = "")
   cat("Dimensions : n =", x$n, "\n")
+  for (k in x$parameters) {
+    n_zero_k <- length(x$per_param[[k]]$zero_vars)
+    cat(sprintf("             p_%s = %d predictors, %d selected, %d zero\n",
+                k, x$p[[k]], x$p[[k]] - n_zero_k, n_zero_k))
+  }
   cat("Iterations : method =", x$method, " learner =", x$learner,
       " mstop =", x$mstop, "\n\n")
 

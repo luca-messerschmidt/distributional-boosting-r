@@ -32,7 +32,7 @@ test_that("learner = 'auto' matches linear on linear truth and beats it on nonli
   y_nl <- 2 + 3 * sin(2 * X$x1) - X$x2 + exp(0.3 * Z$z1) * rnorm(n)
   fit_nl_linear <- boost_gaussian(X, Z, y_nl, mstop = 100, learner = "linear")
   fit_nl_auto   <- boost_gaussian(X, Z, y_nl, mstop = 100, learner = "auto")
-  expect_true(tail(fit_nl_auto$risk, 1) < tail(fit_nl_linear$risk, 1))
+  expect_true(tail(fit_nl_auto$risk, 1) <= tail(fit_nl_linear$risk, 1) * 0.95)
 })
 
 test_that("predict() exactly reconstructs spline steps in- and out-of-sample", {
@@ -76,9 +76,8 @@ test_that("smooth terms are reported additively and only for spline-fit variable
   s <- summary(fit_auto)
   expect_false(anyNA(names(s$net_coef_mu)))       # NA net coefs excluded, not left dangling
   expect_false(any(is.na(s$mu_zero_vars)))
-  if (!is.null(fit_auto$smooth_terms_mu)) {
-    expect_true(grepl("Smooth terms", paste(capture.output(print(fit_auto)), collapse = "\n")))
-  }
+  expect_false(is.null(fit_auto$smooth_terms_mu))
+  expect_true(grepl("Smooth terms", paste(capture.output(print(fit_auto)), collapse = "\n")))
 })
 
 test_that("plot(type = 'partial') works for both spline and linear-only submodels", {
