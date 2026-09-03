@@ -1,0 +1,18 @@
+year <- sub("-.*", "", meta$Date)
+if (!length(year) || is.na(year) || year == "") {
+  year <- format(Sys.Date(), "%Y")
+}
+vers <- meta$Version
+
+bibentry(
+  bibtype  = "Manual",
+  title    = "{asp26boost}: Component-Wise Gradient Boosting for Distributional Regression",
+  author   = c(
+    person("Bjarne", "Herbst"),
+    person("Benedict", "Schnitzler"),
+    person("Luca", "Messerschmidt")
+  ),
+  year     = year,
+  note     = sprintf("R package version %s", vers),
+  url      = "https://gitlab.gwdg.de/bjarne.herbst01/asp26boost"
+)

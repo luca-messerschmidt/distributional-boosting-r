@@ -1,17 +1,10 @@
 ---
 title: "Gaussian Component-wise Boosting"
-output: 
-  rmarkdown::pdf_document:
-    highlight: default
+output: rmarkdown::html_vignette
 vignette: >
   %\VignetteIndexEntry{Gaussian Component-wise Boosting}
   %\VignetteEngine{knitr::rmarkdown}
-  \usepackage[utf8]{inputenc}
-header-includes:
-  - \renewcommand{\familydefault}{\sfdefault}
-  - \usepackage{xcolor}
-  - \usepackage{fvextra}
-  - \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
+  %\VignetteEncoding{UTF-8}
 author:
   Luca Messerschmidt
   Bjarne Herbst

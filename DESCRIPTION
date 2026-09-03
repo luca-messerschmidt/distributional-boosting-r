@@ -1,6 +1,6 @@
 Package: asp26boost
 Type: Package
-Title: Gradient Boosting
+Title: Component-Wise Gradient Boosting for Distributional Regression
 Version: 0.1.0
 Authors@R: c(
     person(
@@ -25,7 +25,8 @@ Description: Implements a component-wise gradient boosting algorithm for
     plotting, printing, and summary methods.
 License: MIT + file LICENSE
 Encoding: UTF-8
-LazyData: true
+URL: https://gitlab.gwdg.de/bjarne.herbst01/asp26boost
+BugReports: https://gitlab.gwdg.de/bjarne.herbst01/asp26boost/-/issues
 RoxygenNote: 7.3.3
 Imports:
     stats,

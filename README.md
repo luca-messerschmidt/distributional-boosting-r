@@ -79,9 +79,9 @@ cv_fit <- cv_boost_gaussian(X, Z, y, k = 5, mstop = 100)
 print(cv_fit)
 ```
 
-See `testing.R` for a fuller walkthrough, and `?boost_gaussian`,
-`?boost_gamma`, `?boost_poisson`, `?boost_binomial`, `?cv_boost_gaussian`
-for detailed documentation.
+See `vignette("boost_gaussian", package = "asp26boost")` for a fuller
+walkthrough, and `?boost_gaussian`, `?boost_gamma`, `?boost_poisson`,
+`?boost_binomial`, `?cv_boost_gaussian` for detailed documentation.
 
 ## Testing
 
