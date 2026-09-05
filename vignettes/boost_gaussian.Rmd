@@ -5,54 +5,85 @@ vignette: >
   %\VignetteIndexEntry{Gaussian Component-wise Boosting}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
+  
 author:
-  Luca Messerschmidt
-  Bjarne Herbst
-  Benedict B. Schnitzler
-date: "2026-05-21"
+  - Luca Messerschmidt
+  - Bjarne Herbst
+  - Benedict B. Schnitzler
 ---
+
 
 ```{r setup, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = ">"
+  comment = ">",
+  fig.width = 7.2,
+  fig.height = 3.5
 )
 options(max.print = 100)
 ```
 
 # Overview
 
+This vignette introduces the main workflow for fitting **Gaussian
+location-scale regression models** with component-wise gradient boosting
+using **asp26boost**.
 
-This vignette introduces the basic workflow for fitting Gaussian component-wise
-boosting models using **asp26boost**.
+Unlike conventional regression models, which typically model only the
+conditional mean of a response, distributional regression allows several
+parameters of the response distribution to depend on covariates. For a
+Gaussian response, this means that both the conditional mean and the
+conditional standard deviation can be modeled:
 
-Boosting is a stage-wise optimization procedure that combines many simple model
-updates into a flexible prediction model. From a statistical perspective,
-boosting can be viewed as an iterative empirical risk minimization algorithm.
-Starting from an initial estimate, the model is repeatedly improved by fitting
-simple base learners to the current residual information and updating only the
-best-performing model component at each iteration. Early stopping acts as a form
-of regularization and often leads to sparse models by selecting only a subset of
-available predictors.
+$$
+Y_i \mid \mathbf{x}_i
+\sim
+\mathcal{N}(\mu_i, \sigma_i^2).
+$$
 
-For Gaussian response models, component-wise boosting minimizes the negative log-likelihood. Beginning with an intercept-only model, each predictor is fitted
-separately to the current residuals. The predictor yielding the largest
-reduction is selected and updated by a shrunken step
-determined by the learning rate. Repeating this procedure yields coefficient
-estimates, variable selection, and regularization simultaneously. In the
-implementation used here, separate predictor sets can be specified for the mean
-(`mu`) and scale (`sigma`) components via the arguments `X` and `Z`.
+In `asp26boost`, the two distributional parameters are represented by
+separate predictors,
 
-The implementation provided by **asp26boost** follows this component-wise
-boosting framework and offers methods for model fitting, prediction,
-summarization, and visualization.
+$$
+\mu_i = \eta_{\mu,i},
+\qquad
+\log(\sigma_i) = \eta_{\sigma,i},
+$$
+
+so that the fitted standard deviation is always positive.
+
+Component-wise boosting estimates these predictors iteratively. At each
+update, the current negative gradient of the joint Gaussian negative
+log-likelihood is calculated. Candidate base learners are then fitted to
+this gradient, and the best candidate is selected. Only the selected
+learner is added to the corresponding predictor, multiplied by a
+learning-rate parameter.
+
+This combination of small updates and early stopping provides both
+regularization and variable selection. Covariates that are never selected
+remain absent from the corresponding predictor, while selected effects are
+shrunken toward their initial values.
+
+`asp26boost` supports:
+
+* separate predictor matrices for the location and scale submodels;
+* linear, penalized spline, or automatically selected base learners;
+* cyclic and noncyclic parameter-update schedules;
+* fixed stopping iterations;
+* patience-based internal early stopping;
+* cross-validation for selecting the stopping iteration; and
+* grid search over stopping iterations, learning rates, and learner types.
+
+The following sections demonstrate these features using a simulated
+heteroskedastic Gaussian regression problem.
 
 # Installation
 
-```{r include = TRUE}
+```{r}
 library(asp26boost)
 ```
 
+The package can also be installed directly from the development repository:
 
 ```{r include = FALSE, eval = FALSE}
 devtools::install_gitlab(
@@ -61,17 +92,16 @@ devtools::install_gitlab(
 )
 ```
 
+# Simulated Gaussian Location-Scale Data
 
-# Simulated Sample Data
-
-To illustrate the basic functionality, we generate a synthetic regression
-dataset with a sparse underlying signal.
+We begin by generating a dataset in which different predictors affect the
+conditional mean and conditional scale.
 
 ```{r}
 set.seed(27092001)
 
-n <- 1000  # number of observations
-p <- 10    # number of covariates
+n <- 1000
+p <- 10
 
 X <- matrix(
   rnorm(n * p),
@@ -81,95 +111,187 @@ X <- matrix(
 
 colnames(X) <- paste0("x", seq_len(p))
 
-# Heteroskedastic scale model using the same three predictors
-beta_mu <- c(2, -1.5, 1, rep(0, p - 3))
+# Location model
+beta_mu <- c(
+  2, -1.5, 1,
+  rep(0, p - 3)
+)
+
 mu <- as.numeric(X %*% beta_mu)
 
-beta_sigma <- c(0.4, -0.3, 0.2, rep(0, p - 3))
-sigma <- exp(as.numeric(X %*% beta_sigma) / 2)
+# Scale model
+# The scale effects are specified on the log(sigma) scale.
+beta_sigma <- c(
+  0, 0, 0,
+  0.5, -0.4, 0.3,
+  rep(0, p - 6)
+)
 
-y <- rnorm(n, mean = mu, sd = sigma)
+log_sigma <- as.numeric(X %*% beta_sigma)
+sigma <- exp(log_sigma)
 
+# Gaussian response
+y <- rnorm(
+  n,
+  mean = mu,
+  sd = sigma
+)
 
 sample_data <- data.frame(
-  y = as.numeric(y),
+  y = y,
   X
 )
 
 head(sample_data)
 ```
 
-The response depends only on the first three predictors. The remaining
-covariates contain noise and are included to illustrate the variable-selection
-behavior of component-wise boosting.
+The data-generating mechanism contains three signal variables for the
+location model (`x1`, `x2`, `x3`) and three different signal variables for
+the scale model (`x4`, `x5`, `x6`). The remaining variables are noise.
 
-# Model Fitting
+The scale model is defined on the logarithmic scale,
 
-Gaussian component-wise boosting models are fitted using `boost_gaussian()`.
+$$
+\log(\sigma_i)
+=
+0.5x_{i4}
+-0.4x_{i5}
++0.3x_{i6},
+$$
+
+which ensures that the resulting standard deviation
+
+$$
+\sigma_i = \exp\{\log(\sigma_i)\}
+$$
+
+is positive.
+
+This setup illustrates an important feature of distributional regression:
+a predictor can influence the variability of the response without affecting
+its conditional mean.
+
+# Fitting a Gaussian Boosting Model
+
+Gaussian models are fitted using `boost_gaussian()`.
 
 ```{r}
 fit <- boost_gaussian(
-  X = sample_data[, -1],   # predictors for mu
-  Z = sample_data[, -1],   # predictors for sigma
+  X = sample_data[, -1],
+  Z = sample_data[, -1],
   y = sample_data$y,
   mstop = 100,
   nu_mu = 0.05,
-  nu_sigma = 0.05
+  nu_sigma = 0.05,
+  method = "cyclic"
 )
 ```
 
-The most important tuning parameters are:
+Here:
 
-- `mstop`: number of boosting iterations.
-- `nu_*`: learning rate controlling the size of each boosting update, defined seperately for the mean and scale.
+* `X` contains the predictors available for the location model;
+* `Z` contains the predictors available for the scale model;
+* `y` is the response;
+* `mstop` controls the maximum number of boosting iterations;
+* `nu_mu` is the learning rate for the location predictor;
+* `nu_sigma` is the learning rate for the scale predictor; and
+* `method` determines how the two distributional parameters are updated.
 
-Internally, predictors are standardized before fitting. The model is initialized
-with the mean response and an initial scale estimate and updated iteratively by
-selecting the predictor that provides the largest reduction in squared-error
-loss.
+Using the same matrix for `X` and `Z` is not required. Different predictor
+sets can be supplied when different variables are considered relevant for
+the two distributional parameters.
 
-Printing the fitted object provides a compact overview of the model.
+For example, one could use
+
+```{r eval = FALSE}
+fit <- boost_gaussian(
+  X = X[, c("x1", "x2", "x3", "x7")],
+  Z = X[, c("x4", "x5", "x6")],
+  y = y
+)
+```
+
+to restrict the candidate variables available to each submodel.
+
+## The Gaussian Loss
+
+The model is fitted by minimizing the joint Gaussian negative
+log-likelihood. Apart from the constant \(n\log(2\pi)/2\), the empirical
+risk is
+
+$$
+R(\boldsymbol{\mu},\boldsymbol{\sigma})
+=
+\sum_{i=1}^n
+\left[
+\log(\sigma_i)
++
+\frac{(y_i-\mu_i)^2}
+     {2\sigma_i^2}
+\right].
+$$
+
+Consequently, the location and scale predictors are **not fitted
+independently**. The gradient for one parameter depends on the current
+estimate of the other parameter.
+
+For the Gaussian family, the negative gradients with respect to the
+location and scale predictors are
+
+$$
+u_{\mu,i}
+=
+\frac{y_i-\mu_i}{\sigma_i^2},
+$$
+
+and
+
+$$
+u_{\sigma,i}
+=
+\frac{(y_i-\mu_i)^2}{\sigma_i^2}-1,
+$$
+
+respectively.
+
+The boosting algorithm fits candidate base learners to these working
+responses and updates the selected predictor in small steps.
+
+# Inspecting the Fitted Model
+
+Printing the fitted object gives a compact overview of the model.
 
 ```{r}
 fit
 ```
 
-Typical output includes:
+The output summarizes the model configuration and the fitted boosting
+procedure, including information about the predictors selected during
+boosting.
 
-- the original model call
-- the tuning parameters specified during the model call
-- The number of predictors, including which were (not) selected
-- basic training-fit statistics
-- the names of the selected variables and selection frequencies
-
-# Model Summary
-
-A more detailed summary can be obtained using `summary()`.
+A more detailed overview is available through `summary()`:
 
 ```{r}
 summary(fit)
 ```
 
-The summary object provides additional information on:
-
-- summary of residuals
-- coefficient estimates on the original predictor scale for selected predictors
-- list of non-selected predictors (`coefficient = 0`)
-
-
+The summary includes residual information and coefficient estimates for
+the fitted model. For linear learners, coefficients are reported on the
+original predictor scale.
 
 # Prediction
 
-Predictions can be computed using `predict()`.
+Predictions can be obtained with `predict()`.
 
 ```{r}
 predict(fit)
 ```
 
-When no additional data are supplied, fitted values for the training sample are
-returned.
+When no new data are supplied, predictions for the training observations
+are returned.
 
-Predictions for new observations can be generated via the `newdata` argument.
+For new observations, provide predictor matrices for the location and scale
+submodels through `newdata_X` and `newdata_Z`.
 
 ```{r}
 new_data <- sample_data[1:5, -1]
@@ -181,8 +303,11 @@ predict(
 )
 ```
 
-The prediction method also supports evaluating models at earlier boosting
-iterations.
+The prediction method returns the fitted distributional parameters for the
+specified observations.
+
+Predictions can also be evaluated at an earlier point along the boosting
+path:
 
 ```{r}
 predict(
@@ -193,19 +318,187 @@ predict(
 )
 ```
 
-**Note**
-For in-sample early-stopped predictions, the model must have been fitted with
-`keep_path = TRUE`, which is the default when `keep_path` is unspecified.
+This is useful for inspecting how predictions change as the model becomes
+more complex.
 
+For predictions at different points along the in-sample boosting path,
+the fitted model needs to retain the path information. This is enabled by
+`keep_path = TRUE`, which is the default when `keep_path` is not specified.
 
-# Model Diagnostics and Visualization
+# Base Learners
 
-The package provides graphical diagnostics through the `plot()` method.
+The argument `learner` determines which candidate base learners are
+considered during boosting.
 
-Coefficient trajectories across boosting iterations can be visualized using `plot()` method by specifying `type = "path"`.
+## Linear Base Learners
+
+With
+
+```{r eval = FALSE}
+learner = "linear"
+```
+
+each candidate corresponds to a linear effect of one predictor.
+
+This is appropriate when the relationship between a predictor and the
+distributional parameter is expected to be approximately linear.
+
+For example:
 
 ```{r}
-# For Location
+fit_linear <- boost_gaussian(
+  X = sample_data[, -1],
+  Z = sample_data[, -1],
+  y = sample_data$y,
+  mstop = 100,
+  nu_mu = 0.05,
+  nu_sigma = 0.05,
+  learner = "linear"
+)
+```
+
+## Penalized Spline Base Learners
+
+Nonlinear relationships can be represented using penalized B-spline base
+learners:
+
+```{r}
+fit_spline <- boost_gaussian(
+  X = sample_data[, -1],
+  Z = sample_data[, -1],
+  y = sample_data$y,
+  mstop = 100,
+  nu_mu = 0.05,
+  nu_sigma = 0.05,
+  learner = "spline"
+)
+```
+
+For each covariate, a cubic B-spline basis is constructed and a
+difference penalty controls the roughness of the fitted effect.
+
+The spline candidates are calibrated to a common target of four effective
+degrees of freedom. This makes spline candidates comparable with each other
+during component-wise selection.
+
+Spline learners are particularly useful when the effect of a predictor is
+not expected to be well described by a straight line.
+
+## Automatic Learner Selection
+
+The setting
+
+```{r eval = FALSE}
+learner = "auto"
+```
+
+allows both linear and spline candidates to compete during boosting.
+
+```{r eval = FALSE}
+fit_auto <- boost_gaussian(
+  X = sample_data[, -1],
+  Z = sample_data[, -1],
+  y = sample_data$y,
+  mstop = 100,
+  nu_mu = 0.05,
+  nu_sigma = 0.05,
+  learner = "auto"
+)
+```
+
+At each update, the candidate with the best fit to the current working
+gradient is selected.
+
+`"auto"` is therefore useful when the functional form of an effect is
+unknown. If interpretability and a strictly linear model are desired,
+`"linear"` is preferable. If nonlinear effects are expected, `"spline"`
+provides a more flexible alternative.
+
+# Cyclic and Noncyclic Updating
+
+Because the Gaussian model contains two distributional parameters, the
+algorithm must determine which parameter to update at each boosting step.
+
+`asp26boost` provides two update schedules.
+
+## Cyclic Updating
+
+Under the cyclic schedule, the location and scale predictors are updated
+successively in a fixed order.
+
+```{r}
+fit_cyclic <- boost_gaussian(
+  X = sample_data[, -1],
+  Z = sample_data[, -1],
+  y = sample_data$y,
+  mstop = 100,
+  nu_mu = 0.05,
+  nu_sigma = 0.05,
+  method = "cyclic"
+)
+```
+
+Within one cyclic round, each active distributional parameter receives one
+update. The gradient is recalculated before each update, meaning that the
+scale update uses the location estimate produced immediately beforehand.
+
+For cyclic boosting, separate stopping budgets can be supplied for the
+location and scale predictors.
+
+```{r eval = FALSE}
+fit_cyclic <- boost_gaussian(
+  X = sample_data[, -1],
+  Z = sample_data[, -1],
+  y = sample_data$y,
+  mstop = c(mu = 100, sigma = 50),
+  nu_mu = 0.05,
+  nu_sigma = 0.05,
+  method = "cyclic"
+)
+```
+
+This allows the two distributional parameters to have different model
+complexities.
+
+## Noncyclic Updating
+
+With
+
+```{r eval = FALSE}
+method = "noncyclic"
+```
+
+the algorithm considers the best candidate update for each distributional
+parameter and applies only the candidate that produces the greatest
+reduction in the joint empirical risk.
+
+```{r eval = FALSE}
+fit_noncyclic <- boost_gaussian(
+  X = sample_data[, -1],
+  Z = sample_data[, -1],
+  y = sample_data$y,
+  mstop = 100,
+  nu_mu = 0.05,
+  nu_sigma = 0.05,
+  method = "noncyclic"
+)
+```
+
+Thus, each noncyclic boosting iteration performs exactly one parameter
+update. The stopping iteration is shared across the complete model.
+
+The two approaches use the same gradients and base learners. They differ
+only in how candidate updates are allocated between the distributional
+parameters.
+
+# Boosting Paths and Variable Selection
+
+One of the main advantages of component-wise boosting is that the boosting
+path provides information about variable selection.
+
+The coefficient trajectories can be visualized using
+
+```{r}
 plot(
   fit,
   type = "path",
@@ -213,7 +506,11 @@ plot(
   top_n = 8,
   scale = "original"
 )
-# And for scale
+```
+
+and for the scale predictor:
+
+```{r}
 plot(
   fit,
   type = "path",
@@ -223,21 +520,26 @@ plot(
 )
 ```
 
-By default, the eight coefficients with the highest selection frequencies are displayed. Coefficients
-may be shown either on the original (default) predictor scale or on the standardized
-training scale.
+The plots show how the estimated effects evolve as boosting progresses.
 
-Variable selection frequencies can be inspected by setting `type = "frequency"`.
+The `scale` argument controls whether effects are displayed on the
+standardized training scale or transformed back to the original predictor
+scale.
+
+Selection frequencies can be visualized with
 
 ```{r}
-# For Location
 plot(
   fit,
   type = "frequency",
   submodel = "mu",
   top_n = 8
 )
-# And for scale
+```
+
+and
+
+```{r}
 plot(
   fit,
   type = "frequency",
@@ -246,96 +548,161 @@ plot(
 )
 ```
 
-This visualization summarizes how often each predictor was selected during the
-boosting process and provides a simple measure of variable importance. Again the number of Predictors displayed can be adjusted via `top_n`.
+The selection frequency records how often a predictor has been selected
+during the boosting procedure. Predictors selected frequently are therefore
+favored by the component-wise fitting procedure.
 
-**Note**
-To use the `plot()`diagnostics the model must be fitted with `keep_path = TRUE`, which is the default.
+This is particularly useful for models with many candidate predictors:
+early stopping can prevent weak variables from entering the model at all,
+while repeatedly selected variables accumulate larger effects.
 
+The plotting methods require the boosting path to be retained, which is the
+default behavior.
 
+# Early Stopping
 
-# Cross-Validation for Selecting the Stopping Iteration
+The stopping iteration is the main regularization parameter in component-wise
+boosting.
 
-A key tuning parameter in component-wise boosting is the number of boosting
-iterations, denoted by `mstop`. While increasing the number of iterations
-typically decreases the training error, excessively large values may lead to
-overfitting. Consequently, early stopping serves as the primary regularization
-mechanism in statistical boosting, encouraging sparsety in the selected variables.
+A small number of iterations produces a strongly regularized model. As more
+iterations are added, additional effects can enter the model and previously
+selected effects can be refined.
 
+Simply choosing a large `mstop` based on training performance is generally
+not appropriate because training negative log-likelihood tends to improve as
+the model becomes more complex.
 
-A common strategy for selecting an appropriate stopping iteration is
-cross-validation. The data is repeatedly split into training and validation
-subsets. Models are fitted on the training folds and evaluated on the
-corresponding validation folds. The value of `mstop` that minimizes the
-estimated out-of-sample prediction error is then selected.
+Instead, the stopping iteration should ideally be selected using
+out-of-sample predictive performance.
 
-The function `cv_boost_gaussian()` implements k-fold cross-validation for
-Gaussian component-wise boosting models.
+## Patience-Based Early Stopping
+
+`asp26boost` provides an internal validation-based early-stopping mechanism
+through the `patience` argument.
+
+For example:
+
+```{r eval = FALSE}
+fit_es <- boost_gaussian(
+  X = sample_data[, -1],
+  Z = sample_data[, -1],
+  y = sample_data$y,
+  mstop = 1000,
+  nu_mu = 0.05,
+  nu_sigma = 0.05,
+  patience = 25,
+  validation_split = 0.2
+)
+```
+
+Here, 20% of the training observations are used as a validation sample.
+Boosting continues while validation risk improves. If the validation risk
+does not improve for 25 consecutive iterations, the search is stopped.
+
+The best stopping point is subsequently used to refit the model on the
+complete dataset.
+
+This separates the **search for the stopping iteration** from the final
+model fit: the final model uses all available observations rather than only
+the training portion of the early-stopping split.
+
+`patience` is therefore useful when an automatically determined stopping
+iteration is desired without explicitly specifying a cross-validation
+procedure.
+
+# Cross-Validation
+
+An alternative is to select the stopping iteration using \(k\)-fold
+cross-validation.
+
+`cv_boost_gaussian()` evaluates the predictive negative log-likelihood over
+a sequence of boosting iterations.
 
 ```{r}
-K = 5 # Number of folds during cross-validation
-
 cv_fit <- cv_boost_gaussian(
   X = sample_data[, -1],
   Z = sample_data[, -1],
   y = sample_data$y,
-  k = K,
-  mstop = 1000,
+  k = 5,
+  mstop = 500,
   nu_mu = 0.05,
   nu_sigma = 0.05,
+  method = "cyclic",
+  learner = "linear",
   seed = 27092001
 )
 ```
 
-# Inspecting Cross-Validation Results
+For a Gaussian model, the validation criterion is the mean negative
+log-likelihood
 
-The resulting object contains the selected variables in the optimal model,
-the optimal `mstop`, and a final model refitted on the complete dataset using the optimal value of `mstop`.
+$$
+\hat{\rho}_v(m)
+=
+\frac{1}{n_v}
+\sum_{i \in v}
+\left[
+\log(\hat{\sigma}_i^{(m)})
++
+\frac{(y_i-\hat{\mu}_i^{(m)})^2}
+     {2(\hat{\sigma}_i^{(m)})^2}
+\right].
+$$
 
+Lower values indicate better predictive performance.
+
+The cross-validation procedure fits the complete boosting path for each
+fold. The resulting path can therefore be evaluated at every stopping
+iteration up to the supplied maximum.
+
+Inspect the resulting object with:
 
 ```{r}
 cv_fit
 ```
 
-A more detailed summary can be obtained via:
+and
 
 ```{r}
 summary(cv_fit)
 ```
 
-This gives additional information on the Residuals and the Coefficients.
-
+The selected stopping iteration is the iteration with the lowest averaged
+validation risk across folds.
 
 # Visualizing the Cross-Validation Curve
 
-The estimated validation error can be visualized using the plot method.
+The cross-validation results can be visualized directly:
 
 ```{r}
 plot(cv_fit)
 ```
 
-The blue curve represents the mean validation error across folds as a function
-of the boosting iteration. The vertical dashed line indicates the selected
-stopping iteration minimizing the estimated prediction error.
+The curve shows the estimated validation negative log-likelihood as a
+function of the boosting iteration.
 
+The selected stopping iteration corresponds to the minimum of the estimated
+validation risk.
 
-# Prediction Using the Cross-Validated Model
+This visualization is useful for diagnosing the regularization behavior of
+the model. Typically, validation risk initially decreases as useful effects
+are added and eventually levels off or increases as additional complexity
+begins to hurt predictive performance.
 
-Predictions from a cross-validated model can be generated directly via
-`predict()`.
+# Prediction from a Cross-Validated Model
+
+The cross-validated object contains a final model refitted on the complete
+dataset at the selected stopping iteration.
+
+Predictions can therefore be generated directly:
 
 ```{r}
 predict(cv_fit)
 ```
 
-When no new data is supplied, fitted values from the refitted model are
-returned.
-
-Predictions for new observations can be obtained by specifying `newdata`.
+For new observations:
 
 ```{r}
-new_data <- sample_data[1:5, -1]
-
 predict(
   cv_fit,
   newdata_X = new_data,
@@ -343,37 +710,127 @@ predict(
 )
 ```
 
-Internally, predictions are delegated to the final boosting model fitted using
-the optimal `mstop` value.
+The final predictions are based on the model fitted using the
+cross-validation-selected stopping iteration.
 
 # Hyperparameter Grid Search
 
-In some situations, both the stopping iteration `mstop` and the learning rate
-`nu` may be treated as tuning parameters. The function `cv_boost_grid()`
-evaluates combinations of candidate values using repeated cross-validation.
+In addition to the stopping iteration, the learning rates and base-learner
+type can be treated as tuning parameters.
 
-```{r eval=TRUE}
+`cv_boost_grid()` evaluates combinations of the supplied candidate values.
+
+```{r eval = TRUE}
 grid_fit <- cv_boost_grid(
   X = sample_data[, -1],
   Z = sample_data[, -1],
   y = sample_data$y,
   k = 5,
   mstop_grid = c(50, 100, 200),
-  nu_mu_grid = c(0.01, 0.1, 0.3),
-  nu_sigma_grid = c(0.01, 0.1, 0.3),
+  nu_mu_grid = c(0.01, 0.05, 0.1),
+  nu_sigma_grid = c(0.01, 0.05, 0.1),
   seed = 27092001
 )
 ```
 
-```{r eval=TRUE}
-grid_fit
+The resulting object can be inspected with:
 
+```{r}
+grid_fit
 ```
 
-The returned object contains the formula call and the best combination of hyperparameters.
+The grid search evaluates the Cartesian product of the supplied candidate
+hyperparameters. Consequently, the computational cost can increase
+substantially when many candidate values are supplied.
 
-# Concluding Remarks
+For practical applications, it is therefore advisable to first choose a
+reasonable range of learning rates and then use cross-validation to identify
+a suitable combination.
 
-This vignette introduced the basic workflow for Gaussian component-wise
-boosting, including model fitting, prediction, visualization, and
-cross-validation-based hyperparameter tuning.
+# Choosing a Model Configuration
+
+The main modeling choices can be summarized as follows.
+
+| Goal                                       | Recommended configuration |
+| ------------------------------------------ | ------------------------- |
+| Approximately linear effects               | `learner = "linear"`      |
+| Nonlinear effects expected                 | `learner = "spline"`      |
+| Functional form unknown                    | `learner = "auto"`        |
+| Standard distributional boosting           | `method = "cyclic"`       |
+| Select one best parameter update at a time | `method = "noncyclic"`    |
+| Fast automatic stopping                    | `patience`                |
+| More robust stopping selection             | `cv_boost_gaussian()`     |
+| Tune several hyperparameters               | `cv_boost_grid()`         |
+
+For most applications, a sensible starting point is a cyclic model with a
+relatively small learning rate and cross-validation-based stopping.
+
+For example:
+
+```{r eval = FALSE}
+fit <- cv_boost_gaussian(
+  X = sample_data[, -1],
+  Z = sample_data[, -1],
+  y = y,
+  k = 5,
+  mstop = 500,
+  nu_mu = 0.05,
+  nu_sigma = 0.05,
+  method = "cyclic",
+  learner = "linear",
+  seed = 123
+)
+```
+
+If nonlinear effects are plausible, replacing `learner = "linear"` by
+`learner = "spline"` is a natural extension.
+
+# Reproducibility
+
+Functions involving random resampling accept an explicit `seed` argument.
+Providing a seed makes the fold assignment or validation split reproducible
+on the same R and package versions.
+
+For example:
+
+```{r eval = FALSE}
+cv_fit <- cv_boost_gaussian(
+  X = sample_data[, -1],
+  Z = sample_data[, -1],
+  y = y,
+  k = 5,
+  mstop = 500,
+  nu_mu = 0.05,
+  nu_sigma = 0.05,
+  seed = 27092001
+)
+```
+
+For fully reproducible analyses, the R version and package version should
+also be recorded.
+
+# Summary
+
+This vignette demonstrated the main workflow for Gaussian component-wise
+boosting with `asp26boost`.
+
+The key steps are:
+
+1. construct predictor matrices for the location and scale submodels;
+2. fit a Gaussian location-scale boosting model with `boost_gaussian()`;
+3. choose between linear and spline base learners;
+4. choose a cyclic or noncyclic update schedule;
+5. inspect coefficient paths and variable-selection frequencies;
+6. control model complexity through early stopping;
+7. use cross-validation to select the stopping iteration; and
+8. optionally use `cv_boost_grid()` to tune several hyperparameters.
+
+The central feature of the approach is that the conditional distribution is
+modeled jointly. Both the location and scale can depend on covariates, while
+component-wise updates and early stopping provide regularization and
+implicit variable selection.
+
+For applications with many candidate predictors, this combination makes
+component-wise boosting particularly attractive: the algorithm can construct
+sparse distributional models without requiring an unregularized estimation
+of all coefficients simultaneously.
