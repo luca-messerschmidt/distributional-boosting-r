@@ -138,7 +138,7 @@ cv_boost_gaussian <- function(X, Z, y, k = 5, mstop = 100, nu_mu = 0.1,
 #'
 #' @export
 plot.cv_boost_gaussian <- function(x, ...) {
-  m <- 1:x$mstop_max
+  m <- seq_along(x$mean_error_cv)
   graphics::plot(m, x$mean_error_cv, type = "l", col = "blue", lwd = 2,
                  xlab = "Boosting Iterations",
                  ylab = "Negative Log-Likelihood",
