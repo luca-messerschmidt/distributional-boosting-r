@@ -68,6 +68,21 @@ test_that("plot.cv_boost_gaussian", {
   expect_identical(ret, res)
 })
 
+test_that("plot.cv_boost_gaussian handles a shortened risk path from patience_cv", {
+  set.seed(20)
+  X <- data.frame(x1 = rnorm(40), x2 = rnorm(40))
+  Z <- data.frame(z1 = rnorm(40))
+  y <- 2 * X$x1 + exp(0.3 * Z$z1) * rnorm(40)
+
+  res <- cv_boost_gaussian(X, Z, y, k = 3, mstop = 100, patience_cv = 2)
+  expect_lt(length(res$mean_error_cv), res$mstop_max)
+
+  pdf(NULL)
+  on.exit(dev.off(), add = TRUE)
+  ret <- plot(res)
+  expect_identical(ret, res)
+})
+
 test_that("print.summary.cv_boost_gaussian", {
   set.seed(15)
   X <- data.frame(x1 = rnorm(20))
