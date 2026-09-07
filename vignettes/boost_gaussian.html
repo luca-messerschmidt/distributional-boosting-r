@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+<meta name="author" content="Luca Messerschmidt" />
+<meta name="author" content="Bjarne Herbst" />
+<meta name="author" content="Benedict B. Schnitzler" />
+
+
+<title>Gaussian Component-wise Boosting</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Gaussian Component-wise Boosting</h1>
+<h4 class="author">Luca Messerschmidt</h4>
+<h4 class="author">Bjarne Herbst</h4>
+<h4 class="author">Benedict B. Schnitzler</h4>
+
+
+
+<div id="overview" class="section level1">
+<h1>Overview</h1>
+<p>This vignette introduces the main workflow for fitting
+<strong>Gaussian location-scale regression models</strong> with
+component-wise gradient boosting using <strong>asp26boost</strong>.</p>
+<p>Unlike conventional regression models, which typically model only the
+conditional mean of a response, distributional regression allows several
+parameters of the response distribution to depend on covariates. For a
+Gaussian response, this means that both the conditional mean and the
+conditional standard deviation can be modeled:</p>
+<p><span class="math display">\[
+Y_i \mid \mathbf{x}_i
+\sim
+\mathcal{N}(\mu_i, \sigma_i^2).
+\]</span></p>
+<p>In <code>asp26boost</code>, the two distributional parameters are
+represented by separate predictors,</p>
+<p><span class="math display">\[
+\mu_i = \eta_{\mu,i},
+\qquad
+\log(\sigma_i) = \eta_{\sigma,i},
+\]</span></p>
+<p>so that the fitted standard deviation is always positive.</p>
+<p>Component-wise boosting estimates these predictors iteratively. At
+each update, the current negative gradient of the joint Gaussian
+negative log-likelihood is calculated. Candidate base learners are then
+fitted to this gradient, and the best candidate is selected. Only the
+selected learner is added to the corresponding predictor, multiplied by
+a learning-rate parameter.</p>
+<p>This combination of small updates and early stopping provides both
+regularization and variable selection. Covariates that are never
+selected remain absent from the corresponding predictor, while selected
+effects are shrunken toward their initial values.</p>
+<p><code>asp26boost</code> supports:</p>
+<ul>
+<li>separate predictor matrices for the location and scale
+submodels;</li>
+<li>linear, penalized spline, or automatically selected base
+learners;</li>
+<li>cyclic and noncyclic parameter-update schedules;</li>
+<li>fixed stopping iterations;</li>
+<li>patience-based internal early stopping;</li>
+<li>cross-validation for selecting the stopping iteration; and</li>
+<li>grid search over stopping iterations, learning rates, and learner
+types.</li>
+</ul>
+<p>The following sections demonstrate these features using a simulated
+heteroskedastic Gaussian regression problem.</p>
+</div>
+<div id="installation" class="section level1">
+<h1>Installation</h1>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(asp26boost)</span></code></pre></div>
+<p>The package can also be installed directly from the development
+repository:</p>
+</div>
+<div id="simulated-gaussian-location-scale-data" class="section level1">
+<h1>Simulated Gaussian Location-Scale Data</h1>
+<p>We begin by generating a dataset in which different predictors affect
+the conditional mean and conditional scale.</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">set.seed</span>(<span class="dv">27092001</span>)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>n <span class="ot">&lt;-</span> <span class="dv">1000</span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>p <span class="ot">&lt;-</span> <span class="dv">10</span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>X <span class="ot">&lt;-</span> <span class="fu">matrix</span>(</span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>  <span class="fu">rnorm</span>(n <span class="sc">*</span> p),</span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a>  <span class="at">nrow =</span> n,</span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a>  <span class="at">ncol =</span> p</span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a>)</span>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a></span>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a><span class="fu">colnames</span>(X) <span class="ot">&lt;-</span> <span class="fu">paste0</span>(<span class="st">&quot;x&quot;</span>, <span class="fu">seq_len</span>(p))</span>
+<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a><span class="co"># Location model</span></span>
+<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a>beta_mu <span class="ot">&lt;-</span> <span class="fu">c</span>(</span>
+<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a>  <span class="dv">2</span>, <span class="sc">-</span><span class="fl">1.5</span>, <span class="dv">1</span>,</span>
+<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a>  <span class="fu">rep</span>(<span class="dv">0</span>, p <span class="sc">-</span> <span class="dv">3</span>)</span>
+<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a>)</span>
+<span id="cb2-19"><a href="#cb2-19" tabindex="-1"></a></span>
+<span id="cb2-20"><a href="#cb2-20" tabindex="-1"></a>mu <span class="ot">&lt;-</span> <span class="fu">as.numeric</span>(X <span class="sc">%*%</span> beta_mu)</span>
+<span id="cb2-21"><a href="#cb2-21" tabindex="-1"></a></span>
+<span id="cb2-22"><a href="#cb2-22" tabindex="-1"></a><span class="co"># Scale model</span></span>
+<span id="cb2-23"><a href="#cb2-23" tabindex="-1"></a><span class="co"># The scale effects are specified on the log(sigma) scale.</span></span>
+<span id="cb2-24"><a href="#cb2-24" tabindex="-1"></a>beta_sigma <span class="ot">&lt;-</span> <span class="fu">c</span>(</span>
+<span id="cb2-25"><a href="#cb2-25" tabindex="-1"></a>  <span class="dv">0</span>, <span class="dv">0</span>, <span class="dv">0</span>,</span>
+<span id="cb2-26"><a href="#cb2-26" tabindex="-1"></a>  <span class="fl">0.5</span>, <span class="sc">-</span><span class="fl">0.4</span>, <span class="fl">0.3</span>,</span>
+<span id="cb2-27"><a href="#cb2-27" tabindex="-1"></a>  <span class="fu">rep</span>(<span class="dv">0</span>, p <span class="sc">-</span> <span class="dv">6</span>)</span>
+<span id="cb2-28"><a href="#cb2-28" tabindex="-1"></a>)</span>
+<span id="cb2-29"><a href="#cb2-29" tabindex="-1"></a></span>
+<span id="cb2-30"><a href="#cb2-30" tabindex="-1"></a>log_sigma <span class="ot">&lt;-</span> <span class="fu">as.numeric</span>(X <span class="sc">%*%</span> beta_sigma)</span>
+<span id="cb2-31"><a href="#cb2-31" tabindex="-1"></a>sigma <span class="ot">&lt;-</span> <span class="fu">exp</span>(log_sigma)</span>
+<span id="cb2-32"><a href="#cb2-32" tabindex="-1"></a></span>
+<span id="cb2-33"><a href="#cb2-33" tabindex="-1"></a><span class="co"># Gaussian response</span></span>
+<span id="cb2-34"><a href="#cb2-34" tabindex="-1"></a>y <span class="ot">&lt;-</span> <span class="fu">rnorm</span>(</span>
+<span id="cb2-35"><a href="#cb2-35" tabindex="-1"></a>  n,</span>
+<span id="cb2-36"><a href="#cb2-36" tabindex="-1"></a>  <span class="at">mean =</span> mu,</span>
+<span id="cb2-37"><a href="#cb2-37" tabindex="-1"></a>  <span class="at">sd =</span> sigma</span>
+<span id="cb2-38"><a href="#cb2-38" tabindex="-1"></a>)</span>
+<span id="cb2-39"><a href="#cb2-39" tabindex="-1"></a></span>
+<span id="cb2-40"><a href="#cb2-40" tabindex="-1"></a>sample_data <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
+<span id="cb2-41"><a href="#cb2-41" tabindex="-1"></a>  <span class="at">y =</span> y,</span>
+<span id="cb2-42"><a href="#cb2-42" tabindex="-1"></a>  X</span>
+<span id="cb2-43"><a href="#cb2-43" tabindex="-1"></a>)</span>
+<span id="cb2-44"><a href="#cb2-44" tabindex="-1"></a></span>
+<span id="cb2-45"><a href="#cb2-45" tabindex="-1"></a><span class="fu">head</span>(sample_data)</span>
+<span id="cb2-46"><a href="#cb2-46" tabindex="-1"></a><span class="sc">&gt;</span>           y         x1         x2          x3         x4           x5</span>
+<span id="cb2-47"><a href="#cb2-47" tabindex="-1"></a><span class="sc">&gt;</span> <span class="dv">1</span>  <span class="fl">2.299111</span> <span class="sc">-</span><span class="fl">0.4261948</span> <span class="sc">-</span><span class="fl">1.1171738</span>  <span class="fl">0.48469532</span>  <span class="fl">1.2131425</span> <span class="sc">-</span><span class="fl">0.336170941</span></span>
+<span id="cb2-48"><a href="#cb2-48" tabindex="-1"></a><span class="sc">&gt;</span> <span class="dv">2</span> <span class="sc">-</span><span class="fl">0.502648</span> <span class="sc">-</span><span class="fl">0.7131972</span>  <span class="fl">0.4245545</span>  <span class="fl">0.44002122</span> <span class="sc">-</span><span class="fl">0.8269670</span> <span class="sc">-</span><span class="fl">0.942629273</span></span>
+<span id="cb2-49"><a href="#cb2-49" tabindex="-1"></a><span class="sc">&gt;</span> <span class="dv">3</span> <span class="sc">-</span><span class="fl">5.100697</span> <span class="sc">-</span><span class="fl">1.8385995</span>  <span class="fl">0.3599087</span> <span class="sc">-</span><span class="fl">0.22333695</span> <span class="sc">-</span><span class="fl">0.4738789</span> <span class="sc">-</span><span class="fl">0.996149133</span></span>
+<span id="cb2-50"><a href="#cb2-50" tabindex="-1"></a><span class="sc">&gt;</span> <span class="dv">4</span> <span class="sc">-</span><span class="fl">3.647504</span>  <span class="fl">0.8625711</span>  <span class="fl">1.5398105</span> <span class="sc">-</span><span class="fl">0.07525713</span>  <span class="fl">1.4213003</span> <span class="sc">-</span><span class="fl">0.003867292</span></span>
+<span id="cb2-51"><a href="#cb2-51" tabindex="-1"></a><span class="sc">&gt;</span> <span class="dv">5</span> <span class="sc">-</span><span class="fl">3.617573</span> <span class="sc">-</span><span class="fl">1.0810953</span>  <span class="fl">1.3918728</span>  <span class="fl">0.35499283</span> <span class="sc">-</span><span class="fl">0.5583812</span>  <span class="fl">0.978657121</span></span>
+<span id="cb2-52"><a href="#cb2-52" tabindex="-1"></a><span class="sc">&gt;</span> <span class="dv">6</span> <span class="sc">-</span><span class="fl">4.111268</span> <span class="sc">-</span><span class="fl">1.7623401</span> <span class="sc">-</span><span class="fl">0.8189664</span> <span class="sc">-</span><span class="fl">1.73188716</span> <span class="sc">-</span><span class="fl">1.5627475</span> <span class="sc">-</span><span class="fl">0.983039525</span></span>
+<span id="cb2-53"><a href="#cb2-53" tabindex="-1"></a><span class="sc">&gt;</span>           x6          x7         x8         x9        x10</span>
+<span id="cb2-54"><a href="#cb2-54" tabindex="-1"></a><span class="sc">&gt;</span> <span class="dv">1</span> <span class="sc">-</span><span class="fl">1.2355394</span>  <span class="fl">0.70395175</span>  <span class="fl">2.1222730</span> <span class="sc">-</span><span class="fl">1.7657446</span>  <span class="fl">0.4977308</span></span>
+<span id="cb2-55"><a href="#cb2-55" tabindex="-1"></a><span class="sc">&gt;</span> <span class="dv">2</span>  <span class="fl">0.8983855</span> <span class="sc">-</span><span class="fl">1.19335497</span> <span class="sc">-</span><span class="fl">0.9879921</span>  <span class="fl">0.2926119</span>  <span class="fl">0.8580337</span></span>
+<span id="cb2-56"><a href="#cb2-56" tabindex="-1"></a><span class="sc">&gt;</span> <span class="dv">3</span> <span class="sc">-</span><span class="fl">2.0669550</span> <span class="sc">-</span><span class="fl">0.65491769</span>  <span class="fl">0.5644572</span>  <span class="fl">0.5134706</span>  <span class="fl">0.3168015</span></span>
+<span id="cb2-57"><a href="#cb2-57" tabindex="-1"></a><span class="sc">&gt;</span> <span class="dv">4</span>  <span class="fl">0.4912211</span>  <span class="fl">0.22194407</span>  <span class="fl">0.7515952</span> <span class="sc">-</span><span class="fl">1.4363766</span>  <span class="fl">0.8185884</span></span>
+<span id="cb2-58"><a href="#cb2-58" tabindex="-1"></a><span class="sc">&gt;</span> <span class="dv">5</span> <span class="sc">-</span><span class="fl">0.7280939</span>  <span class="fl">0.04176014</span>  <span class="fl">0.3786812</span> <span class="sc">-</span><span class="fl">0.3892265</span> <span class="sc">-</span><span class="fl">1.1157866</span></span>
+<span id="cb2-59"><a href="#cb2-59" tabindex="-1"></a><span class="sc">&gt;</span> <span class="dv">6</span> <span class="sc">-</span><span class="fl">0.8300621</span> <span class="sc">-</span><span class="fl">2.22611065</span>  <span class="fl">0.9980038</span>  <span class="fl">0.3107517</span> <span class="sc">-</span><span class="fl">0.5029159</span></span></code></pre></div>
+<p>The data-generating mechanism contains three signal variables for the
+location model (<code>x1</code>, <code>x2</code>, <code>x3</code>) and
+three different signal variables for the scale model (<code>x4</code>,
+<code>x5</code>, <code>x6</code>). The remaining variables are
+noise.</p>
+<p>The scale model is defined on the logarithmic scale,</p>
+<p><span class="math display">\[
+\log(\sigma_i)
+=
+0.5x_{i4}
+-0.4x_{i5}
++0.3x_{i6},
+\]</span></p>
+<p>which ensures that the resulting standard deviation</p>
+<p><span class="math display">\[
+\sigma_i = \exp\{\log(\sigma_i)\}
+\]</span></p>
+<p>is positive.</p>
+<p>This setup illustrates an important feature of distributional
+regression: a predictor can influence the variability of the response
+without affecting its conditional mean.</p>
+</div>
+<div id="fitting-a-gaussian-boosting-model" class="section level1">
+<h1>Fitting a Gaussian Boosting Model</h1>
+<p>Gaussian models are fitted using <code>boost_gaussian()</code>.</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">boost_gaussian</span>(</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  <span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>  <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>  <span class="at">y =</span> sample_data<span class="sc">$</span>y,</span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>  <span class="at">mstop =</span> <span class="dv">100</span>,</span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>  <span class="at">nu_mu =</span> <span class="fl">0.05</span>,</span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>  <span class="at">nu_sigma =</span> <span class="fl">0.05</span>,</span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>  <span class="at">method =</span> <span class="st">&quot;cyclic&quot;</span></span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a>)</span></code></pre></div>
+<p>Here:</p>
+<ul>
+<li><code>X</code> contains the predictors available for the location
+model;</li>
+<li><code>Z</code> contains the predictors available for the scale
+model;</li>
+<li><code>y</code> is the response;</li>
+<li><code>mstop</code> controls the maximum number of boosting
+iterations;</li>
+<li><code>nu_mu</code> is the learning rate for the location
+predictor;</li>
+<li><code>nu_sigma</code> is the learning rate for the scale predictor;
+and</li>
+<li><code>method</code> determines how the two distributional parameters
+are updated.</li>
+</ul>
+<p>Using the same matrix for <code>X</code> and <code>Z</code> is not
+required. Different predictor sets can be supplied when different
+variables are considered relevant for the two distributional
+parameters.</p>
+<p>For example, one could use</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">boost_gaussian</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="at">X =</span> X[, <span class="fu">c</span>(<span class="st">&quot;x1&quot;</span>, <span class="st">&quot;x2&quot;</span>, <span class="st">&quot;x3&quot;</span>, <span class="st">&quot;x7&quot;</span>)],</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">Z =</span> X[, <span class="fu">c</span>(<span class="st">&quot;x4&quot;</span>, <span class="st">&quot;x5&quot;</span>, <span class="st">&quot;x6&quot;</span>)],</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  <span class="at">y =</span> y</span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>)</span></code></pre></div>
+<p>to restrict the candidate variables available to each submodel.</p>
+<div id="the-gaussian-loss" class="section level2">
+<h2>The Gaussian Loss</h2>
+<p>The model is fitted by minimizing the joint Gaussian negative
+log-likelihood. Apart from the constant <span class="math inline">\(n\log(2\pi)/2\)</span>, the empirical risk is</p>
+<p><span class="math display">\[
+R(\boldsymbol{\mu},\boldsymbol{\sigma})
+=
+\sum_{i=1}^n
+\left[
+\log(\sigma_i)
++
+\frac{(y_i-\mu_i)^2}
+     {2\sigma_i^2}
+\right].
+\]</span></p>
+<p>Consequently, the location and scale predictors are <strong>not
+fitted independently</strong>. The gradient for one parameter depends on
+the current estimate of the other parameter.</p>
+<p>For the Gaussian family, the negative gradients with respect to the
+location and scale predictors are</p>
+<p><span class="math display">\[
+u_{\mu,i}
+=
+\frac{y_i-\mu_i}{\sigma_i^2},
+\]</span></p>
+<p>and</p>
+<p><span class="math display">\[
+u_{\sigma,i}
+=
+\frac{(y_i-\mu_i)^2}{\sigma_i^2}-1,
+\]</span></p>
+<p>respectively.</p>
+<p>The boosting algorithm fits candidate base learners to these working
+responses and updates the selected predictor in small steps.</p>
+</div>
+</div>
+<div id="inspecting-the-fitted-model" class="section level1">
+<h1>Inspecting the Fitted Model</h1>
+<p>Printing the fitted object gives a compact overview of the model.</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>fit</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="er">&gt;</span> Distributional Gaussian Gradient Boosting</span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a><span class="sc">&gt;</span> <span class="sc">---------------------------------------------</span></span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a><span class="er">&gt;</span> Call<span class="sc">:</span></span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a><span class="er">&gt;</span>   <span class="fu">boost_gaussian</span>(<span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>], <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],     <span class="at">y =</span> sample_data<span class="sc">$</span>y, <span class="at">mstop =</span> <span class="dv">100</span>, <span class="at">nu_mu =</span> <span class="fl">0.05</span>, <span class="at">nu_sigma =</span> <span class="fl">0.05</span>,     <span class="at">method =</span> <span class="st">&quot;cyclic&quot;</span>)</span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="er">&gt;</span> Tuning parameters<span class="sc">:</span></span>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="er">&gt;</span>   method        <span class="sc">:</span> cyclic </span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a><span class="sc">&gt;</span>   mstop         <span class="sc">:</span> <span class="dv">100</span> </span>
+<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a><span class="sc">&gt;</span>   nu_mu         <span class="sc">:</span> <span class="fl">0.05</span> </span>
+<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a><span class="sc">&gt;</span>   nu_sigma      <span class="sc">:</span> <span class="fl">0.05</span> </span>
+<span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a><span class="er">&gt;</span> Location <span class="fu">predictors</span> (X)<span class="sc">:</span></span>
+<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a><span class="er">&gt;</span>   Total                  <span class="sc">:</span> <span class="dv">10</span> </span>
+<span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a><span class="sc">&gt;</span>   <span class="fu">Selected</span> (<span class="sc">&gt;=</span> <span class="dv">1</span> time)   <span class="sc">:</span> <span class="dv">2</span> </span>
+<span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a><span class="sc">&gt;</span>   Never <span class="fu">selected</span> (<span class="at">coef=</span><span class="dv">0</span>)<span class="sc">:</span> <span class="dv">8</span> </span>
+<span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a><span class="er">&gt;</span>   Selected variables and selection counts<span class="sc">:</span></span>
+<span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a><span class="er">&gt;</span> </span>
+<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a><span class="er">&gt;</span> x1 x2 </span>
+<span id="cb5-22"><a href="#cb5-22" tabindex="-1"></a><span class="sc">&gt;</span> <span class="dv">79</span> <span class="dv">21</span> </span>
+<span id="cb5-23"><a href="#cb5-23" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb5-24"><a href="#cb5-24" tabindex="-1"></a><span class="er">&gt;</span> Scale <span class="fu">predictors</span> (Z)<span class="sc">:</span></span>
+<span id="cb5-25"><a href="#cb5-25" tabindex="-1"></a><span class="er">&gt;</span>   Total                  <span class="sc">:</span> <span class="dv">10</span> </span>
+<span id="cb5-26"><a href="#cb5-26" tabindex="-1"></a><span class="sc">&gt;</span>   <span class="fu">Selected</span> (<span class="sc">&gt;=</span> <span class="dv">1</span> time)   <span class="sc">:</span> <span class="dv">8</span> </span>
+<span id="cb5-27"><a href="#cb5-27" tabindex="-1"></a><span class="sc">&gt;</span>   Never <span class="fu">selected</span> (<span class="at">coef=</span><span class="dv">0</span>)<span class="sc">:</span> <span class="dv">2</span> </span>
+<span id="cb5-28"><a href="#cb5-28" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb5-29"><a href="#cb5-29" tabindex="-1"></a><span class="er">&gt;</span>   Selected variables and selection counts<span class="sc">:</span></span>
+<span id="cb5-30"><a href="#cb5-30" tabindex="-1"></a><span class="er">&gt;</span> </span>
+<span id="cb5-31"><a href="#cb5-31" tabindex="-1"></a><span class="er">&gt;</span>  x4  x5  x6  x7  x8  x1 x10  x9 </span>
+<span id="cb5-32"><a href="#cb5-32" tabindex="-1"></a><span class="sc">&gt;</span>  <span class="dv">30</span>  <span class="dv">25</span>  <span class="dv">19</span>   <span class="dv">7</span>   <span class="dv">7</span>   <span class="dv">6</span>   <span class="dv">5</span>   <span class="dv">1</span> </span>
+<span id="cb5-33"><a href="#cb5-33" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb5-34"><a href="#cb5-34" tabindex="-1"></a><span class="er">&gt;</span> Training <span class="fu">fit</span> (location)<span class="sc">:</span></span>
+<span id="cb5-35"><a href="#cb5-35" tabindex="-1"></a><span class="er">&gt;</span>   RSS       <span class="sc">:</span> <span class="fl">5865.679</span> </span>
+<span id="cb5-36"><a href="#cb5-36" tabindex="-1"></a><span class="sc">&gt;</span>   MSE       <span class="sc">:</span> <span class="fl">5.8657</span> </span>
+<span id="cb5-37"><a href="#cb5-37" tabindex="-1"></a><span class="sc">&gt;</span>   R<span class="sc">-</span>squared <span class="sc">:</span> <span class="fl">0.3706</span></span></code></pre></div>
+<p>The output summarizes the model configuration and the fitted boosting
+procedure, including information about the predictors selected during
+boosting.</p>
+<p>A more detailed overview is available through
+<code>summary()</code>:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">summary</span>(fit)</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="er">&gt;</span> Distributional Gaussian Gradient Boosting <span class="sc">-</span> Model Summary</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a><span class="sc">&gt;</span> <span class="sc">-------------------------------------------------------</span></span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="er">&gt;</span> Call<span class="sc">:</span></span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a><span class="er">&gt;</span>   <span class="fu">boost_gaussian</span>(<span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>], <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],     <span class="at">y =</span> sample_data<span class="sc">$</span>y, <span class="at">mstop =</span> <span class="dv">100</span>, <span class="at">nu_mu =</span> <span class="fl">0.05</span>, <span class="at">nu_sigma =</span> <span class="fl">0.05</span>,     <span class="at">method =</span> <span class="st">&quot;cyclic&quot;</span>)</span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="er">&gt;</span> Dimensions <span class="sc">:</span> n <span class="ot">=</span> <span class="dv">1000</span> </span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="sc">&gt;</span>              pX <span class="ot">=</span> <span class="dv">10</span> (location predictors) <span class="dv">2</span> selected, <span class="dv">8</span> zero</span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="sc">&gt;</span>              pZ <span class="ot">=</span> <span class="dv">10</span> (scale predictors)    <span class="dv">8</span> selected, <span class="dv">2</span> zero</span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a><span class="er">&gt;</span> Iterations <span class="sc">:</span> method <span class="ot">=</span> cyclic  mstop <span class="ot">=</span> <span class="dv">100</span>  nu_mu <span class="ot">=</span> <span class="fl">0.05</span>  nu_sigma <span class="ot">=</span> <span class="fl">0.05</span> </span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a><span class="er">&gt;</span> <span class="fu">Residuals</span> (y <span class="sc">-</span> mu_hat)<span class="sc">:</span></span>
+<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a><span class="er">&gt;</span>       Min      <span class="dv">1</span>Q Median    Mean    <span class="dv">3</span>Q    Max</span>
+<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a><span class="sc">&gt;</span>  <span class="sc">-</span><span class="fl">10.5583</span> <span class="sc">-</span><span class="fl">1.4527</span> <span class="fl">0.0283</span> <span class="sc">-</span><span class="fl">0.0192</span> <span class="fl">1.415</span> <span class="fl">9.4686</span></span>
+<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a><span class="er">&gt;</span>   RSS <span class="sc">:</span> <span class="fl">5865.6794</span>    MSE <span class="sc">:</span> <span class="fl">5.8657</span>    R<span class="sc">-</span>squared <span class="sc">:</span> <span class="fl">0.3706</span></span>
+<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb6-20"><a href="#cb6-20" tabindex="-1"></a><span class="er">&gt;</span> Location submodel <span class="fu">coefficients</span> (original predictor scale)<span class="sc">:</span></span>
+<span id="cb6-21"><a href="#cb6-21" tabindex="-1"></a><span class="er">&gt;</span>   Variable                   Coefficient</span>
+<span id="cb6-22"><a href="#cb6-22" tabindex="-1"></a><span class="sc">&gt;</span>   <span class="sc">-------------------------</span>  <span class="sc">-----------</span></span>
+<span id="cb6-23"><a href="#cb6-23" tabindex="-1"></a><span class="er">&gt;</span>   (Intercept)                <span class="fl">0.0291</span></span>
+<span id="cb6-24"><a href="#cb6-24" tabindex="-1"></a><span class="sc">&gt;</span>   x1                         <span class="fl">0.8551</span></span>
+<span id="cb6-25"><a href="#cb6-25" tabindex="-1"></a><span class="sc">&gt;</span>   x2                         <span class="sc">-</span><span class="fl">0.2352</span></span>
+<span id="cb6-26"><a href="#cb6-26" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb6-27"><a href="#cb6-27" tabindex="-1"></a><span class="er">&gt;</span>   Variables never <span class="fu">selected</span> (zero coefficient)<span class="sc">:</span></span>
+<span id="cb6-28"><a href="#cb6-28" tabindex="-1"></a><span class="er">&gt;</span>    x3, x4, x5, x6, x7, x8, x9, x10</span>
+<span id="cb6-29"><a href="#cb6-29" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb6-30"><a href="#cb6-30" tabindex="-1"></a><span class="er">&gt;</span> Scale submodel coefficients</span>
+<span id="cb6-31"><a href="#cb6-31" tabindex="-1"></a><span class="sc">&gt;</span>   Linear predictor <span class="sc">:</span> <span class="fu">log</span>(sigma)  [original predictor scale]</span>
+<span id="cb6-32"><a href="#cb6-32" tabindex="-1"></a><span class="sc">&gt;</span>   Interpretation   <span class="sc">:</span> one unit increase <span class="cf">in</span> z_j multiplies sigma</span>
+<span id="cb6-33"><a href="#cb6-33" tabindex="-1"></a><span class="sc">&gt;</span>                      by <span class="fu">exp</span>(coefficient)</span>
+<span id="cb6-34"><a href="#cb6-34" tabindex="-1"></a><span class="sc">&gt;</span>   Variable                   Coefficient</span>
+<span id="cb6-35"><a href="#cb6-35" tabindex="-1"></a><span class="sc">&gt;</span>   <span class="sc">-------------------------</span>  <span class="sc">-----------</span></span>
+<span id="cb6-36"><a href="#cb6-36" tabindex="-1"></a><span class="er">&gt;</span>   (Intercept log<span class="sc">-</span>sigma)      <span class="fl">0.8793</span></span>
+<span id="cb6-37"><a href="#cb6-37" tabindex="-1"></a><span class="sc">&gt;</span>   x4                         <span class="fl">0.1295</span></span>
+<span id="cb6-38"><a href="#cb6-38" tabindex="-1"></a><span class="sc">&gt;</span>   x5                         <span class="sc">-</span><span class="fl">0.0722</span></span>
+<span id="cb6-39"><a href="#cb6-39" tabindex="-1"></a><span class="sc">&gt;</span>   x6                         <span class="fl">0.0515</span></span>
+<span id="cb6-40"><a href="#cb6-40" tabindex="-1"></a><span class="sc">&gt;</span>   x1                         <span class="sc">-</span><span class="fl">0.0193</span></span>
+<span id="cb6-41"><a href="#cb6-41" tabindex="-1"></a><span class="sc">&gt;</span>   x7                         <span class="fl">0.0173</span></span>
+<span id="cb6-42"><a href="#cb6-42" tabindex="-1"></a><span class="sc">&gt;</span>   x8                         <span class="fl">0.0147</span></span>
+<span id="cb6-43"><a href="#cb6-43" tabindex="-1"></a><span class="sc">&gt;</span>   x10                        <span class="sc">-</span><span class="fl">0.0116</span></span>
+<span id="cb6-44"><a href="#cb6-44" tabindex="-1"></a><span class="sc">&gt;</span>   x9                         <span class="sc">-</span><span class="fl">0.0019</span></span>
+<span id="cb6-45"><a href="#cb6-45" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb6-46"><a href="#cb6-46" tabindex="-1"></a><span class="er">&gt;</span>   Variables never <span class="fu">selected</span> (zero coefficient)<span class="sc">:</span></span>
+<span id="cb6-47"><a href="#cb6-47" tabindex="-1"></a><span class="er">&gt;</span>    x2, x3</span></code></pre></div>
+<p>The summary includes residual information and coefficient estimates
+for the fitted model. For linear learners, coefficients are reported on
+the original predictor scale.</p>
+</div>
+<div id="prediction" class="section level1">
+<h1>Prediction</h1>
+<p>Predictions can be obtained with <code>predict()</code>.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">predict</span>(fit)</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="sc">&gt;</span>   [<span class="dv">1</span>] <span class="sc">-</span><span class="fl">0.07247232</span> <span class="sc">-</span><span class="fl">0.68054863</span> <span class="sc">-</span><span class="fl">1.62762118</span>  <span class="fl">0.40446728</span> <span class="sc">-</span><span class="fl">1.22267183</span> <span class="sc">-</span><span class="fl">1.28509856</span></span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="sc">&gt;</span>   [<span class="dv">7</span>]  <span class="fl">0.01179797</span>  <span class="fl">1.61916138</span> <span class="sc">-</span><span class="fl">0.03814752</span> <span class="sc">-</span><span class="fl">0.79824819</span> <span class="sc">-</span><span class="fl">1.61272866</span>  <span class="fl">0.77544797</span></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">13</span>]  <span class="fl">1.07055965</span> <span class="sc">-</span><span class="fl">0.65416679</span> <span class="sc">-</span><span class="fl">1.75477310</span> <span class="sc">-</span><span class="fl">0.22987355</span> <span class="sc">-</span><span class="fl">1.12352466</span>  <span class="fl">0.07261336</span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">19</span>]  <span class="fl">0.33361970</span>  <span class="fl">0.76390594</span> <span class="sc">-</span><span class="fl">0.96869185</span>  <span class="fl">0.70427967</span> <span class="sc">-</span><span class="fl">0.18664667</span> <span class="sc">-</span><span class="fl">0.61391731</span></span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">25</span>] <span class="sc">-</span><span class="fl">0.03779399</span> <span class="sc">-</span><span class="fl">0.36134513</span> <span class="sc">-</span><span class="fl">0.55522314</span>  <span class="fl">1.97130101</span> <span class="sc">-</span><span class="fl">0.86143594</span> <span class="sc">-</span><span class="fl">1.51502864</span></span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">31</span>] <span class="sc">-</span><span class="fl">0.45101442</span> <span class="sc">-</span><span class="fl">1.41975486</span> <span class="sc">-</span><span class="fl">0.29793829</span>  <span class="fl">0.11119158</span> <span class="sc">-</span><span class="fl">0.08059773</span>  <span class="fl">0.58851207</span></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">37</span>]  <span class="fl">0.60820365</span> <span class="sc">-</span><span class="fl">0.64147540</span>  <span class="fl">2.12167060</span>  <span class="fl">1.04352103</span>  <span class="fl">1.59712049</span>  <span class="fl">0.47125995</span></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">43</span>] <span class="sc">-</span><span class="fl">0.60218282</span>  <span class="fl">0.07579908</span> <span class="sc">-</span><span class="fl">0.46491014</span>  <span class="fl">0.23013115</span> <span class="sc">-</span><span class="fl">0.44439637</span> <span class="sc">-</span><span class="fl">0.73408023</span></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">49</span>]  <span class="fl">0.09515732</span> <span class="sc">-</span><span class="fl">0.29902334</span> <span class="sc">-</span><span class="fl">0.87657827</span>  <span class="fl">0.15776071</span>  <span class="fl">1.97862795</span>  <span class="fl">0.58030912</span></span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">55</span>]  <span class="fl">0.85524156</span> <span class="sc">-</span><span class="fl">0.61284253</span> <span class="sc">-</span><span class="fl">0.33905089</span>  <span class="fl">1.12499309</span>  <span class="fl">0.15322274</span>  <span class="fl">0.11337876</span></span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">61</span>] <span class="sc">-</span><span class="fl">2.51494819</span>  <span class="fl">0.19475905</span>  <span class="fl">0.11289078</span> <span class="sc">-</span><span class="fl">1.38721372</span> <span class="sc">-</span><span class="fl">0.94436123</span> <span class="sc">-</span><span class="fl">0.95159763</span></span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">67</span>]  <span class="fl">0.89751033</span> <span class="sc">-</span><span class="fl">0.69663639</span>  <span class="fl">0.22254321</span>  <span class="fl">0.16762761</span> <span class="sc">-</span><span class="fl">0.96018344</span>  <span class="fl">1.29342255</span></span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">73</span>]  <span class="fl">0.69144822</span> <span class="sc">-</span><span class="fl">1.51949580</span>  <span class="fl">0.91848580</span>  <span class="fl">1.59460242</span>  <span class="fl">0.38558838</span>  <span class="fl">0.62265835</span></span>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">79</span>] <span class="sc">-</span><span class="fl">1.69344472</span> <span class="sc">-</span><span class="fl">1.86715863</span>  <span class="fl">0.41842557</span>  <span class="fl">0.35972059</span>  <span class="fl">0.93376330</span> <span class="sc">-</span><span class="fl">0.33981050</span></span>
+<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">85</span>]  <span class="fl">0.28456089</span>  <span class="fl">1.06752635</span>  <span class="fl">1.98859624</span>  <span class="fl">2.06251814</span>  <span class="fl">0.60392745</span>  <span class="fl">1.17527868</span></span>
+<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">91</span>] <span class="sc">-</span><span class="fl">0.07293640</span> <span class="sc">-</span><span class="fl">0.73959706</span> <span class="sc">-</span><span class="fl">1.60368052</span> <span class="sc">-</span><span class="fl">0.02689937</span> <span class="sc">-</span><span class="fl">1.52136344</span> <span class="sc">-</span><span class="fl">0.13903043</span></span>
+<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">97</span>]  <span class="fl">0.03302057</span> <span class="sc">-</span><span class="fl">0.84165107</span>  <span class="fl">0.34687979</span> <span class="sc">-</span><span class="fl">1.43579481</span></span>
+<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a><span class="sc">&gt;</span>  [ reached <span class="st">&#39;max&#39;</span> <span class="sc">/</span> <span class="fu">getOption</span>(<span class="st">&quot;max.print&quot;</span>) <span class="sc">--</span> omitted <span class="dv">900</span> entries ]</span></code></pre></div>
+<p>When no new data are supplied, predictions for the training
+observations are returned.</p>
+<p>For new observations, provide predictor matrices for the location and
+scale submodels through <code>newdata_X</code> and
+<code>newdata_Z</code>.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>new_data <span class="ot">&lt;-</span> sample_data[<span class="dv">1</span><span class="sc">:</span><span class="dv">5</span>, <span class="sc">-</span><span class="dv">1</span>]</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a><span class="fu">predict</span>(</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>  fit,</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>  <span class="at">newdata_X =</span> new_data,</span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>  <span class="at">newdata_Z =</span> new_data</span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>)</span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="sc">&gt;</span> [<span class="dv">1</span>] <span class="sc">-</span><span class="fl">0.07247232</span> <span class="sc">-</span><span class="fl">0.68054863</span> <span class="sc">-</span><span class="fl">1.62762118</span>  <span class="fl">0.40446728</span> <span class="sc">-</span><span class="fl">1.22267183</span></span></code></pre></div>
+<p>The prediction method returns the fitted distributional parameters
+for the specified observations.</p>
+<p>Predictions can also be evaluated at an earlier point along the
+boosting path:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">predict</span>(</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>  fit,</span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>  <span class="at">newdata_X =</span> new_data,</span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>  <span class="at">newdata_Z =</span> new_data,</span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>  <span class="at">mstop =</span> <span class="dv">25</span></span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a>)</span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a><span class="sc">&gt;</span> [<span class="dv">1</span>] <span class="sc">-</span><span class="fl">0.1095294</span> <span class="sc">-</span><span class="fl">0.1879099</span> <span class="sc">-</span><span class="fl">0.4952578</span>  <span class="fl">0.2424333</span> <span class="sc">-</span><span class="fl">0.2883830</span></span></code></pre></div>
+<p>This is useful for inspecting how predictions change as the model
+becomes more complex.</p>
+<p>For predictions at different points along the in-sample boosting
+path, the fitted model needs to retain the path information. This is
+enabled by <code>keep_path = TRUE</code>, which is the default when
+<code>keep_path</code> is not specified.</p>
+</div>
+<div id="base-learners" class="section level1">
+<h1>Base Learners</h1>
+<p>The argument <code>learner</code> determines which candidate base
+learners are considered during boosting.</p>
+<div id="linear-base-learners" class="section level2">
+<h2>Linear Base Learners</h2>
+<p>With</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>learner <span class="ot">=</span> <span class="st">&quot;linear&quot;</span></span></code></pre></div>
+<p>each candidate corresponds to a linear effect of one predictor.</p>
+<p>This is appropriate when the relationship between a predictor and the
+distributional parameter is expected to be approximately linear.</p>
+<p>For example:</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a>fit_linear <span class="ot">&lt;-</span> <span class="fu">boost_gaussian</span>(</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a>  <span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a>  <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a>  <span class="at">y =</span> sample_data<span class="sc">$</span>y,</span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a>  <span class="at">mstop =</span> <span class="dv">100</span>,</span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a>  <span class="at">nu_mu =</span> <span class="fl">0.05</span>,</span>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a>  <span class="at">nu_sigma =</span> <span class="fl">0.05</span>,</span>
+<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a>  <span class="at">learner =</span> <span class="st">&quot;linear&quot;</span></span>
+<span id="cb11-9"><a href="#cb11-9" tabindex="-1"></a>)</span></code></pre></div>
+</div>
+<div id="penalized-spline-base-learners" class="section level2">
+<h2>Penalized Spline Base Learners</h2>
+<p>Nonlinear relationships can be represented using penalized B-spline
+base learners:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a>fit_spline <span class="ot">&lt;-</span> <span class="fu">boost_gaussian</span>(</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>  <span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a>  <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a>  <span class="at">y =</span> sample_data<span class="sc">$</span>y,</span>
+<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a>  <span class="at">mstop =</span> <span class="dv">100</span>,</span>
+<span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a>  <span class="at">nu_mu =</span> <span class="fl">0.05</span>,</span>
+<span id="cb12-7"><a href="#cb12-7" tabindex="-1"></a>  <span class="at">nu_sigma =</span> <span class="fl">0.05</span>,</span>
+<span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a>  <span class="at">learner =</span> <span class="st">&quot;spline&quot;</span></span>
+<span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a>)</span></code></pre></div>
+<p>For each covariate, a cubic B-spline basis is constructed and a
+difference penalty controls the roughness of the fitted effect.</p>
+<p>The spline candidates are calibrated to a common target of four
+effective degrees of freedom. This makes spline candidates comparable
+with each other during component-wise selection.</p>
+<p>Spline learners are particularly useful when the effect of a
+predictor is not expected to be well described by a straight line.</p>
+</div>
+<div id="automatic-learner-selection" class="section level2">
+<h2>Automatic Learner Selection</h2>
+<p>The setting</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a>learner <span class="ot">=</span> <span class="st">&quot;auto&quot;</span></span></code></pre></div>
+<p>allows both linear and spline candidates to compete during
+boosting.</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a>fit_auto <span class="ot">&lt;-</span> <span class="fu">boost_gaussian</span>(</span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>  <span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>  <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a>  <span class="at">y =</span> sample_data<span class="sc">$</span>y,</span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a>  <span class="at">mstop =</span> <span class="dv">100</span>,</span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a>  <span class="at">nu_mu =</span> <span class="fl">0.05</span>,</span>
+<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a>  <span class="at">nu_sigma =</span> <span class="fl">0.05</span>,</span>
+<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a>  <span class="at">learner =</span> <span class="st">&quot;auto&quot;</span></span>
+<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a>)</span></code></pre></div>
+<p>At each update, the candidate with the best fit to the current
+working gradient is selected.</p>
+<p><code>&quot;auto&quot;</code> is therefore useful when the functional form of
+an effect is unknown. If interpretability and a strictly linear model
+are desired, <code>&quot;linear&quot;</code> is preferable. If nonlinear effects
+are expected, <code>&quot;spline&quot;</code> provides a more flexible
+alternative.</p>
+</div>
+</div>
+<div id="cyclic-and-noncyclic-updating" class="section level1">
+<h1>Cyclic and Noncyclic Updating</h1>
+<p>Because the Gaussian model contains two distributional parameters,
+the algorithm must determine which parameter to update at each boosting
+step.</p>
+<p><code>asp26boost</code> provides two update schedules.</p>
+<div id="cyclic-updating" class="section level2">
+<h2>Cyclic Updating</h2>
+<p>Under the cyclic schedule, the location and scale predictors are
+updated successively in a fixed order.</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>fit_cyclic <span class="ot">&lt;-</span> <span class="fu">boost_gaussian</span>(</span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>  <span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>  <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a>  <span class="at">y =</span> sample_data<span class="sc">$</span>y,</span>
+<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a>  <span class="at">mstop =</span> <span class="dv">100</span>,</span>
+<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a>  <span class="at">nu_mu =</span> <span class="fl">0.05</span>,</span>
+<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a>  <span class="at">nu_sigma =</span> <span class="fl">0.05</span>,</span>
+<span id="cb15-8"><a href="#cb15-8" tabindex="-1"></a>  <span class="at">method =</span> <span class="st">&quot;cyclic&quot;</span></span>
+<span id="cb15-9"><a href="#cb15-9" tabindex="-1"></a>)</span></code></pre></div>
+<p>Within one cyclic round, each active distributional parameter
+receives one update. The gradient is recalculated before each update,
+meaning that the scale update uses the location estimate produced
+immediately beforehand.</p>
+<p>For cyclic boosting, separate stopping budgets can be supplied for
+the location and scale predictors.</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a>fit_cyclic <span class="ot">&lt;-</span> <span class="fu">boost_gaussian</span>(</span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a>  <span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a>  <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a>  <span class="at">y =</span> sample_data<span class="sc">$</span>y,</span>
+<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a>  <span class="at">mstop =</span> <span class="fu">c</span>(<span class="at">mu =</span> <span class="dv">100</span>, <span class="at">sigma =</span> <span class="dv">50</span>),</span>
+<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a>  <span class="at">nu_mu =</span> <span class="fl">0.05</span>,</span>
+<span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a>  <span class="at">nu_sigma =</span> <span class="fl">0.05</span>,</span>
+<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a>  <span class="at">method =</span> <span class="st">&quot;cyclic&quot;</span></span>
+<span id="cb16-9"><a href="#cb16-9" tabindex="-1"></a>)</span></code></pre></div>
+<p>This allows the two distributional parameters to have different model
+complexities.</p>
+</div>
+<div id="noncyclic-updating" class="section level2">
+<h2>Noncyclic Updating</h2>
+<p>With</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a>method <span class="ot">=</span> <span class="st">&quot;noncyclic&quot;</span></span></code></pre></div>
+<p>the algorithm considers the best candidate update for each
+distributional parameter and applies only the candidate that produces
+the greatest reduction in the joint empirical risk.</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a>fit_noncyclic <span class="ot">&lt;-</span> <span class="fu">boost_gaussian</span>(</span>
+<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a>  <span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a>  <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a>  <span class="at">y =</span> sample_data<span class="sc">$</span>y,</span>
+<span id="cb18-5"><a href="#cb18-5" tabindex="-1"></a>  <span class="at">mstop =</span> <span class="dv">100</span>,</span>
+<span id="cb18-6"><a href="#cb18-6" tabindex="-1"></a>  <span class="at">nu_mu =</span> <span class="fl">0.05</span>,</span>
+<span id="cb18-7"><a href="#cb18-7" tabindex="-1"></a>  <span class="at">nu_sigma =</span> <span class="fl">0.05</span>,</span>
+<span id="cb18-8"><a href="#cb18-8" tabindex="-1"></a>  <span class="at">method =</span> <span class="st">&quot;noncyclic&quot;</span></span>
+<span id="cb18-9"><a href="#cb18-9" tabindex="-1"></a>)</span></code></pre></div>
+<p>Thus, each noncyclic boosting iteration performs exactly one
+parameter update. The stopping iteration is shared across the complete
+model.</p>
+<p>The two approaches use the same gradients and base learners. They
+differ only in how candidate updates are allocated between the
+distributional parameters.</p>
+</div>
+</div>
+<div id="boosting-paths-and-variable-selection" class="section level1">
+<h1>Boosting Paths and Variable Selection</h1>
+<p>One of the main advantages of component-wise boosting is that the
+boosting path provides information about variable selection.</p>
+<p>The coefficient trajectories can be visualized using</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a><span class="fu">plot</span>(</span>
+<span id="cb19-2"><a href="#cb19-2" tabindex="-1"></a>  fit,</span>
+<span id="cb19-3"><a href="#cb19-3" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">&quot;path&quot;</span>,</span>
+<span id="cb19-4"><a href="#cb19-4" tabindex="-1"></a>  <span class="at">submodel =</span> <span class="st">&quot;mu&quot;</span>,</span>
+<span id="cb19-5"><a href="#cb19-5" tabindex="-1"></a>  <span class="at">top_n =</span> <span class="dv">8</span>,</span>
+<span id="cb19-6"><a href="#cb19-6" tabindex="-1"></a>  <span class="at">scale =</span> <span class="st">&quot;original&quot;</span></span>
+<span id="cb19-7"><a href="#cb19-7" tabindex="-1"></a>)</span></code></pre></div>
+<p><img role="img" src="data:image/png;base64,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" /><!-- --></p>
+<p>and for the scale predictor:</p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" tabindex="-1"></a><span class="fu">plot</span>(</span>
+<span id="cb20-2"><a href="#cb20-2" tabindex="-1"></a>  fit,</span>
+<span id="cb20-3"><a href="#cb20-3" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">&quot;path&quot;</span>,</span>
+<span id="cb20-4"><a href="#cb20-4" tabindex="-1"></a>  <span class="at">submodel =</span> <span class="st">&quot;sigma&quot;</span>,</span>
+<span id="cb20-5"><a href="#cb20-5" tabindex="-1"></a>  <span class="at">top_n =</span> <span class="dv">8</span>,</span>
+<span id="cb20-6"><a href="#cb20-6" tabindex="-1"></a>  <span class="at">scale =</span> <span class="st">&quot;original&quot;</span></span>
+<span id="cb20-7"><a href="#cb20-7" tabindex="-1"></a>)</span></code></pre></div>
+<p><img role="img" src="data:image/png;base64,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" /><!-- --></p>
+<p>The plots show how the estimated effects evolve as boosting
+progresses.</p>
+<p>The <code>scale</code> argument controls whether effects are
+displayed on the standardized training scale or transformed back to the
+original predictor scale.</p>
+<p>Selection frequencies can be visualized with</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" tabindex="-1"></a><span class="fu">plot</span>(</span>
+<span id="cb21-2"><a href="#cb21-2" tabindex="-1"></a>  fit,</span>
+<span id="cb21-3"><a href="#cb21-3" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">&quot;frequency&quot;</span>,</span>
+<span id="cb21-4"><a href="#cb21-4" tabindex="-1"></a>  <span class="at">submodel =</span> <span class="st">&quot;mu&quot;</span>,</span>
+<span id="cb21-5"><a href="#cb21-5" tabindex="-1"></a>  <span class="at">top_n =</span> <span class="dv">8</span></span>
+<span id="cb21-6"><a href="#cb21-6" tabindex="-1"></a>)</span></code></pre></div>
+<p><img role="img" src="data:image/png;base64,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" /><!-- --></p>
+<p>and</p>
+<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb22-1"><a href="#cb22-1" tabindex="-1"></a><span class="fu">plot</span>(</span>
+<span id="cb22-2"><a href="#cb22-2" tabindex="-1"></a>  fit,</span>
+<span id="cb22-3"><a href="#cb22-3" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">&quot;frequency&quot;</span>,</span>
+<span id="cb22-4"><a href="#cb22-4" tabindex="-1"></a>  <span class="at">submodel =</span> <span class="st">&quot;sigma&quot;</span>,</span>
+<span id="cb22-5"><a href="#cb22-5" tabindex="-1"></a>  <span class="at">top_n =</span> <span class="dv">8</span></span>
+<span id="cb22-6"><a href="#cb22-6" tabindex="-1"></a>)</span></code></pre></div>
+<p><img role="img" src="data:image/png;base64,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" /><!-- --></p>
+<p>The selection frequency records how often a predictor has been
+selected during the boosting procedure. Predictors selected frequently
+are therefore favored by the component-wise fitting procedure.</p>
+<p>This is particularly useful for models with many candidate
+predictors: early stopping can prevent weak variables from entering the
+model at all, while repeatedly selected variables accumulate larger
+effects.</p>
+<p>The plotting methods require the boosting path to be retained, which
+is the default behavior.</p>
+</div>
+<div id="early-stopping" class="section level1">
+<h1>Early Stopping</h1>
+<p>The stopping iteration is the main regularization parameter in
+component-wise boosting.</p>
+<p>A small number of iterations produces a strongly regularized model.
+As more iterations are added, additional effects can enter the model and
+previously selected effects can be refined.</p>
+<p>Simply choosing a large <code>mstop</code> based on training
+performance is generally not appropriate because training negative
+log-likelihood tends to improve as the model becomes more complex.</p>
+<p>Instead, the stopping iteration should ideally be selected using
+out-of-sample predictive performance.</p>
+<div id="patience-based-early-stopping" class="section level2">
+<h2>Patience-Based Early Stopping</h2>
+<p><code>asp26boost</code> provides an internal validation-based
+early-stopping mechanism through the <code>patience</code> argument.</p>
+<p>For example:</p>
+<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb23-1"><a href="#cb23-1" tabindex="-1"></a>fit_es <span class="ot">&lt;-</span> <span class="fu">boost_gaussian</span>(</span>
+<span id="cb23-2"><a href="#cb23-2" tabindex="-1"></a>  <span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb23-3"><a href="#cb23-3" tabindex="-1"></a>  <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb23-4"><a href="#cb23-4" tabindex="-1"></a>  <span class="at">y =</span> sample_data<span class="sc">$</span>y,</span>
+<span id="cb23-5"><a href="#cb23-5" tabindex="-1"></a>  <span class="at">mstop =</span> <span class="dv">1000</span>,</span>
+<span id="cb23-6"><a href="#cb23-6" tabindex="-1"></a>  <span class="at">nu_mu =</span> <span class="fl">0.05</span>,</span>
+<span id="cb23-7"><a href="#cb23-7" tabindex="-1"></a>  <span class="at">nu_sigma =</span> <span class="fl">0.05</span>,</span>
+<span id="cb23-8"><a href="#cb23-8" tabindex="-1"></a>  <span class="at">patience =</span> <span class="dv">25</span>,</span>
+<span id="cb23-9"><a href="#cb23-9" tabindex="-1"></a>  <span class="at">validation_split =</span> <span class="fl">0.2</span></span>
+<span id="cb23-10"><a href="#cb23-10" tabindex="-1"></a>)</span></code></pre></div>
+<p>Here, 20% of the training observations are used as a validation
+sample. Boosting continues while validation risk improves. If the
+validation risk does not improve for 25 consecutive iterations, the
+search is stopped.</p>
+<p>The best stopping point is subsequently used to refit the model on
+the complete dataset.</p>
+<p>This separates the <strong>search for the stopping iteration</strong>
+from the final model fit: the final model uses all available
+observations rather than only the training portion of the early-stopping
+split.</p>
+<p><code>patience</code> is therefore useful when an automatically
+determined stopping iteration is desired without explicitly specifying a
+cross-validation procedure.</p>
+</div>
+</div>
+<div id="cross-validation" class="section level1">
+<h1>Cross-Validation</h1>
+<p>An alternative is to select the stopping iteration using <span class="math inline">\(k\)</span>-fold cross-validation.</p>
+<p><code>cv_boost_gaussian()</code> evaluates the predictive negative
+log-likelihood over a sequence of boosting iterations.</p>
+<div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb24-1"><a href="#cb24-1" tabindex="-1"></a>cv_fit <span class="ot">&lt;-</span> <span class="fu">cv_boost_gaussian</span>(</span>
+<span id="cb24-2"><a href="#cb24-2" tabindex="-1"></a>  <span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb24-3"><a href="#cb24-3" tabindex="-1"></a>  <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb24-4"><a href="#cb24-4" tabindex="-1"></a>  <span class="at">y =</span> sample_data<span class="sc">$</span>y,</span>
+<span id="cb24-5"><a href="#cb24-5" tabindex="-1"></a>  <span class="at">k =</span> <span class="dv">5</span>,</span>
+<span id="cb24-6"><a href="#cb24-6" tabindex="-1"></a>  <span class="at">mstop =</span> <span class="dv">500</span>,</span>
+<span id="cb24-7"><a href="#cb24-7" tabindex="-1"></a>  <span class="at">nu_mu =</span> <span class="fl">0.05</span>,</span>
+<span id="cb24-8"><a href="#cb24-8" tabindex="-1"></a>  <span class="at">nu_sigma =</span> <span class="fl">0.05</span>,</span>
+<span id="cb24-9"><a href="#cb24-9" tabindex="-1"></a>  <span class="at">method =</span> <span class="st">&quot;cyclic&quot;</span>,</span>
+<span id="cb24-10"><a href="#cb24-10" tabindex="-1"></a>  <span class="at">learner =</span> <span class="st">&quot;linear&quot;</span>,</span>
+<span id="cb24-11"><a href="#cb24-11" tabindex="-1"></a>  <span class="at">seed =</span> <span class="dv">27092001</span></span>
+<span id="cb24-12"><a href="#cb24-12" tabindex="-1"></a>)</span></code></pre></div>
+<p>For a Gaussian model, the validation criterion is the mean negative
+log-likelihood</p>
+<p><span class="math display">\[
+\hat{\rho}_v(m)
+=
+\frac{1}{n_v}
+\sum_{i \in v}
+\left[
+\log(\hat{\sigma}_i^{(m)})
++
+\frac{(y_i-\hat{\mu}_i^{(m)})^2}
+     {2(\hat{\sigma}_i^{(m)})^2}
+\right].
+\]</span></p>
+<p>Lower values indicate better predictive performance.</p>
+<p>The cross-validation procedure fits the complete boosting path for
+each fold. The resulting path can therefore be evaluated at every
+stopping iteration up to the supplied maximum.</p>
+<p>Inspect the resulting object with:</p>
+<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb25-1"><a href="#cb25-1" tabindex="-1"></a>cv_fit</span>
+<span id="cb25-2"><a href="#cb25-2" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb25-3"><a href="#cb25-3" tabindex="-1"></a><span class="er">&gt;</span> Call<span class="sc">:</span></span>
+<span id="cb25-4"><a href="#cb25-4" tabindex="-1"></a><span class="er">&gt;</span> <span class="fu">cv_boost_gaussian</span>(<span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>], <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>], </span>
+<span id="cb25-5"><a href="#cb25-5" tabindex="-1"></a><span class="sc">&gt;</span>     <span class="at">y =</span> sample_data<span class="sc">$</span>y, <span class="at">k =</span> <span class="dv">5</span>, <span class="at">mstop =</span> <span class="dv">500</span>, <span class="at">nu_mu =</span> <span class="fl">0.05</span>, <span class="at">nu_sigma =</span> <span class="fl">0.05</span>, </span>
+<span id="cb25-6"><a href="#cb25-6" tabindex="-1"></a><span class="sc">&gt;</span>     <span class="at">method =</span> <span class="st">&quot;cyclic&quot;</span>, <span class="at">seed =</span> <span class="dv">27092001</span>, <span class="at">learner =</span> <span class="st">&quot;linear&quot;</span>)</span>
+<span id="cb25-7"><a href="#cb25-7" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb25-8"><a href="#cb25-8" tabindex="-1"></a><span class="er">&gt;</span> Optimal mstop<span class="sc">:</span> <span class="dv">461</span> </span>
+<span id="cb25-9"><a href="#cb25-9" tabindex="-1"></a><span class="sc">&gt;</span> Selected <span class="fu">variables</span> (location)<span class="sc">:</span></span>
+<span id="cb25-10"><a href="#cb25-10" tabindex="-1"></a><span class="er">&gt;</span> [<span class="dv">1</span>] <span class="st">&quot;x1&quot;</span>  <span class="st">&quot;x2&quot;</span>  <span class="st">&quot;x3&quot;</span>  <span class="st">&quot;x10&quot;</span> <span class="st">&quot;x6&quot;</span>  <span class="st">&quot;x8&quot;</span>  <span class="st">&quot;x7&quot;</span>  <span class="st">&quot;x9&quot;</span>  <span class="st">&quot;x5&quot;</span> </span>
+<span id="cb25-11"><a href="#cb25-11" tabindex="-1"></a><span class="sc">&gt;</span> Selected <span class="fu">variables</span> (scale)<span class="sc">:</span></span>
+<span id="cb25-12"><a href="#cb25-12" tabindex="-1"></a><span class="er">&gt;</span> [<span class="dv">1</span>] <span class="st">&quot;x4&quot;</span>  <span class="st">&quot;x5&quot;</span>  <span class="st">&quot;x1&quot;</span>  <span class="st">&quot;x6&quot;</span>  <span class="st">&quot;x7&quot;</span>  <span class="st">&quot;x8&quot;</span>  <span class="st">&quot;x10&quot;</span> <span class="st">&quot;x9&quot;</span>  <span class="st">&quot;x2&quot;</span></span></code></pre></div>
+<p>and</p>
+<div class="sourceCode" id="cb26"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb26-1"><a href="#cb26-1" tabindex="-1"></a><span class="fu">summary</span>(cv_fit)</span>
+<span id="cb26-2"><a href="#cb26-2" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb26-3"><a href="#cb26-3" tabindex="-1"></a><span class="er">&gt;</span> Call<span class="sc">:</span></span>
+<span id="cb26-4"><a href="#cb26-4" tabindex="-1"></a><span class="er">&gt;</span> <span class="fu">cv_boost_gaussian</span>(<span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>], <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>], </span>
+<span id="cb26-5"><a href="#cb26-5" tabindex="-1"></a><span class="sc">&gt;</span>     <span class="at">y =</span> sample_data<span class="sc">$</span>y, <span class="at">k =</span> <span class="dv">5</span>, <span class="at">mstop =</span> <span class="dv">500</span>, <span class="at">nu_mu =</span> <span class="fl">0.05</span>, <span class="at">nu_sigma =</span> <span class="fl">0.05</span>, </span>
+<span id="cb26-6"><a href="#cb26-6" tabindex="-1"></a><span class="sc">&gt;</span>     <span class="at">method =</span> <span class="st">&quot;cyclic&quot;</span>, <span class="at">seed =</span> <span class="dv">27092001</span>, <span class="at">learner =</span> <span class="st">&quot;linear&quot;</span>)</span>
+<span id="cb26-7"><a href="#cb26-7" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb26-8"><a href="#cb26-8" tabindex="-1"></a><span class="er">&gt;</span> Optimal mstop<span class="sc">:</span> <span class="dv">461</span> </span>
+<span id="cb26-9"><a href="#cb26-9" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb26-10"><a href="#cb26-10" tabindex="-1"></a><span class="er">&gt;</span> Residuals<span class="sc">:</span></span>
+<span id="cb26-11"><a href="#cb26-11" tabindex="-1"></a><span class="er">&gt;</span>     Min.  <span class="dv">1</span>st Qu.   Median     Mean  <span class="dv">3</span>rd Qu.     Max. </span>
+<span id="cb26-12"><a href="#cb26-12" tabindex="-1"></a><span class="sc">&gt;</span> <span class="sc">-</span><span class="fl">6.72501</span> <span class="sc">-</span><span class="fl">0.54241</span> <span class="sc">-</span><span class="fl">0.02167</span>  <span class="fl">0.02200</span>  <span class="fl">0.58494</span>  <span class="fl">7.84366</span> </span>
+<span id="cb26-13"><a href="#cb26-13" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb26-14"><a href="#cb26-14" tabindex="-1"></a><span class="er">&gt;</span> <span class="fu">Coefficients</span> (location)<span class="sc">:</span></span>
+<span id="cb26-15"><a href="#cb26-15" tabindex="-1"></a><span class="er">&gt;</span>           x1           x2           x3           x4           x5           x6 </span>
+<span id="cb26-16"><a href="#cb26-16" tabindex="-1"></a><span class="sc">&gt;</span>  <span class="fl">1.983055699</span> <span class="sc">-</span><span class="fl">1.482216837</span>  <span class="fl">0.991708058</span>  <span class="fl">0.000000000</span> <span class="sc">-</span><span class="fl">0.001210494</span>  <span class="fl">0.013324598</span> </span>
+<span id="cb26-17"><a href="#cb26-17" tabindex="-1"></a><span class="sc">&gt;</span>           x7           x8           x9          x10 </span>
+<span id="cb26-18"><a href="#cb26-18" tabindex="-1"></a><span class="sc">&gt;</span> <span class="sc">-</span><span class="fl">0.010329831</span>  <span class="fl">0.007827757</span> <span class="sc">-</span><span class="fl">0.009984439</span>  <span class="fl">0.033560244</span> </span>
+<span id="cb26-19"><a href="#cb26-19" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb26-20"><a href="#cb26-20" tabindex="-1"></a><span class="er">&gt;</span> <span class="fu">Coefficients</span> (scale)<span class="sc">:</span></span>
+<span id="cb26-21"><a href="#cb26-21" tabindex="-1"></a><span class="er">&gt;</span>          x1          x2          x3          x4          x5          x6 </span>
+<span id="cb26-22"><a href="#cb26-22" tabindex="-1"></a><span class="sc">&gt;</span>  <span class="fl">0.01815440</span> <span class="sc">-</span><span class="fl">0.01544094</span>  <span class="fl">0.00000000</span>  <span class="fl">0.45065884</span> <span class="sc">-</span><span class="fl">0.38505808</span>  <span class="fl">0.24104706</span> </span>
+<span id="cb26-23"><a href="#cb26-23" tabindex="-1"></a><span class="sc">&gt;</span>          x7          x8          x9         x10 </span>
+<span id="cb26-24"><a href="#cb26-24" tabindex="-1"></a><span class="sc">&gt;</span>  <span class="fl">0.01321935</span>  <span class="fl">0.01733950</span>  <span class="fl">0.01489235</span>  <span class="fl">0.03164023</span></span></code></pre></div>
+<p>The selected stopping iteration is the iteration with the lowest
+averaged validation risk across folds.</p>
+</div>
+<div id="visualizing-the-cross-validation-curve" class="section level1">
+<h1>Visualizing the Cross-Validation Curve</h1>
+<p>The cross-validation results can be visualized directly:</p>
+<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb27-1"><a href="#cb27-1" tabindex="-1"></a><span class="fu">plot</span>(cv_fit)</span></code></pre></div>
+<p><img role="img" src="data:image/png;base64,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" /><!-- --></p>
+<p>The curve shows the estimated validation negative log-likelihood as a
+function of the boosting iteration.</p>
+<p>The selected stopping iteration corresponds to the minimum of the
+estimated validation risk.</p>
+<p>This visualization is useful for diagnosing the regularization
+behavior of the model. Typically, validation risk initially decreases as
+useful effects are added and eventually levels off or increases as
+additional complexity begins to hurt predictive performance.</p>
+</div>
+<div id="prediction-from-a-cross-validated-model" class="section level1">
+<h1>Prediction from a Cross-Validated Model</h1>
+<p>The cross-validated object contains a final model refitted on the
+complete dataset at the selected stopping iteration.</p>
+<p>Predictions can therefore be generated directly:</p>
+<div class="sourceCode" id="cb28"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb28-1"><a href="#cb28-1" tabindex="-1"></a><span class="fu">predict</span>(cv_fit)</span>
+<span id="cb28-2"><a href="#cb28-2" tabindex="-1"></a><span class="sc">&gt;</span>   [<span class="dv">1</span>]  <span class="fl">1.33506060</span> <span class="sc">-</span><span class="fl">1.54759991</span> <span class="sc">-</span><span class="fl">4.39459997</span> <span class="sc">-</span><span class="fl">0.57844571</span> <span class="sc">-</span><span class="fl">3.88075381</span> <span class="sc">-</span><span class="fl">3.98146298</span></span>
+<span id="cb28-3"><a href="#cb28-3" tabindex="-1"></a><span class="sc">&gt;</span>   [<span class="dv">7</span>]  <span class="fl">1.70017795</span>  <span class="fl">2.04364469</span>  <span class="fl">0.80234358</span> <span class="sc">-</span><span class="fl">3.16284129</span> <span class="sc">-</span><span class="fl">6.59477775</span>  <span class="fl">1.87246979</span></span>
+<span id="cb28-4"><a href="#cb28-4" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">13</span>]  <span class="fl">4.24282420</span> <span class="sc">-</span><span class="fl">2.58938253</span> <span class="sc">-</span><span class="fl">4.34525718</span> <span class="sc">-</span><span class="fl">0.62073252</span> <span class="sc">-</span><span class="fl">3.66875778</span>  <span class="fl">0.57221411</span></span>
+<span id="cb28-5"><a href="#cb28-5" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">19</span>]  <span class="fl">1.02750375</span>  <span class="fl">3.68882182</span> <span class="sc">-</span><span class="fl">4.01607473</span>  <span class="fl">0.61009643</span> <span class="sc">-</span><span class="fl">0.87380136</span> <span class="sc">-</span><span class="fl">2.04089395</span></span>
+<span id="cb28-6"><a href="#cb28-6" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">25</span>]  <span class="fl">1.72814005</span>  <span class="fl">1.08470877</span> <span class="sc">-</span><span class="fl">0.98791676</span>  <span class="fl">2.89227879</span> <span class="sc">-</span><span class="fl">3.93249108</span> <span class="sc">-</span><span class="fl">4.55026389</span></span>
+<span id="cb28-7"><a href="#cb28-7" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">31</span>]  <span class="fl">0.29316529</span> <span class="sc">-</span><span class="fl">2.20215288</span>  <span class="fl">0.88225537</span>  <span class="fl">1.81543032</span>  <span class="fl">1.08473525</span> <span class="sc">-</span><span class="fl">1.67152293</span></span>
+<span id="cb28-8"><a href="#cb28-8" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">37</span>]  <span class="fl">2.81979681</span> <span class="sc">-</span><span class="fl">3.43016025</span>  <span class="fl">7.43004526</span>  <span class="fl">1.12738727</span>  <span class="fl">3.44659437</span>  <span class="fl">1.52316258</span></span>
+<span id="cb28-9"><a href="#cb28-9" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">43</span>] <span class="sc">-</span><span class="fl">0.36388878</span> <span class="sc">-</span><span class="fl">0.04382494</span> <span class="sc">-</span><span class="fl">0.11320244</span> <span class="sc">-</span><span class="fl">0.80165427</span> <span class="sc">-</span><span class="fl">0.95775673</span> <span class="sc">-</span><span class="fl">1.20574835</span></span>
+<span id="cb28-10"><a href="#cb28-10" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">49</span>]  <span class="fl">2.17415465</span> <span class="sc">-</span><span class="fl">0.73460844</span> <span class="sc">-</span><span class="fl">4.40729867</span>  <span class="fl">1.22067927</span>  <span class="fl">4.93476526</span>  <span class="fl">3.26291810</span></span>
+<span id="cb28-11"><a href="#cb28-11" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">55</span>]  <span class="fl">5.23696794</span> <span class="sc">-</span><span class="fl">1.66239517</span> <span class="sc">-</span><span class="fl">0.90844306</span>  <span class="fl">1.49900942</span> <span class="sc">-</span><span class="fl">0.55083286</span>  <span class="fl">2.96842221</span></span>
+<span id="cb28-12"><a href="#cb28-12" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">61</span>] <span class="sc">-</span><span class="fl">7.54403742</span>  <span class="fl">3.25878506</span> <span class="sc">-</span><span class="fl">0.55672619</span> <span class="sc">-</span><span class="fl">3.55335122</span> <span class="sc">-</span><span class="fl">3.01502197</span> <span class="sc">-</span><span class="fl">3.96080559</span></span>
+<span id="cb28-13"><a href="#cb28-13" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">67</span>]  <span class="fl">3.50850233</span> <span class="sc">-</span><span class="fl">2.28192969</span> <span class="sc">-</span><span class="fl">0.62568131</span> <span class="sc">-</span><span class="fl">0.98632941</span> <span class="sc">-</span><span class="fl">2.50764170</span>  <span class="fl">1.04823616</span></span>
+<span id="cb28-14"><a href="#cb28-14" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">73</span>]  <span class="fl">0.08279252</span> <span class="sc">-</span><span class="fl">3.75331337</span> <span class="sc">-</span><span class="fl">0.48813179</span>  <span class="fl">2.61462926</span> <span class="sc">-</span><span class="fl">0.50235892</span>  <span class="fl">1.79318606</span></span>
+<span id="cb28-15"><a href="#cb28-15" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">79</span>] <span class="sc">-</span><span class="fl">3.87849977</span> <span class="sc">-</span><span class="fl">6.95831498</span>  <span class="fl">2.99835229</span>  <span class="fl">0.11227562</span>  <span class="fl">1.35893469</span> <span class="sc">-</span><span class="fl">4.45105588</span></span>
+<span id="cb28-16"><a href="#cb28-16" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">85</span>]  <span class="fl">0.91090608</span>  <span class="fl">1.68574198</span>  <span class="fl">3.03718695</span>  <span class="fl">6.81375104</span>  <span class="fl">0.94130806</span>  <span class="fl">0.42540508</span></span>
+<span id="cb28-17"><a href="#cb28-17" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">91</span>] <span class="sc">-</span><span class="fl">2.08564469</span> <span class="sc">-</span><span class="fl">3.53421992</span> <span class="sc">-</span><span class="fl">2.85737546</span>  <span class="fl">0.65766236</span> <span class="sc">-</span><span class="fl">2.75679852</span> <span class="sc">-</span><span class="fl">2.15207516</span></span>
+<span id="cb28-18"><a href="#cb28-18" tabindex="-1"></a><span class="sc">&gt;</span>  [<span class="dv">97</span>]  <span class="fl">0.60752078</span> <span class="sc">-</span><span class="fl">3.70700163</span>  <span class="fl">0.08945735</span> <span class="sc">-</span><span class="fl">2.31189141</span></span>
+<span id="cb28-19"><a href="#cb28-19" tabindex="-1"></a><span class="sc">&gt;</span>  [ reached <span class="st">&#39;max&#39;</span> <span class="sc">/</span> <span class="fu">getOption</span>(<span class="st">&quot;max.print&quot;</span>) <span class="sc">--</span> omitted <span class="dv">900</span> entries ]</span></code></pre></div>
+<p>For new observations:</p>
+<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb29-1"><a href="#cb29-1" tabindex="-1"></a><span class="fu">predict</span>(</span>
+<span id="cb29-2"><a href="#cb29-2" tabindex="-1"></a>  cv_fit,</span>
+<span id="cb29-3"><a href="#cb29-3" tabindex="-1"></a>  <span class="at">newdata_X =</span> new_data,</span>
+<span id="cb29-4"><a href="#cb29-4" tabindex="-1"></a>  <span class="at">newdata_Z =</span> new_data</span>
+<span id="cb29-5"><a href="#cb29-5" tabindex="-1"></a>)</span>
+<span id="cb29-6"><a href="#cb29-6" tabindex="-1"></a><span class="sc">&gt;</span> [<span class="dv">1</span>]  <span class="fl">1.3350606</span> <span class="sc">-</span><span class="fl">1.5475999</span> <span class="sc">-</span><span class="fl">4.3946000</span> <span class="sc">-</span><span class="fl">0.5784457</span> <span class="sc">-</span><span class="fl">3.8807538</span></span></code></pre></div>
+<p>The final predictions are based on the model fitted using the
+cross-validation-selected stopping iteration.</p>
+</div>
+<div id="hyperparameter-grid-search" class="section level1">
+<h1>Hyperparameter Grid Search</h1>
+<p>In addition to the stopping iteration, the learning rates and
+base-learner type can be treated as tuning parameters.</p>
+<p><code>cv_boost_grid()</code> evaluates combinations of the supplied
+candidate values.</p>
+<div class="sourceCode" id="cb30"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb30-1"><a href="#cb30-1" tabindex="-1"></a>grid_fit <span class="ot">&lt;-</span> <span class="fu">cv_boost_grid</span>(</span>
+<span id="cb30-2"><a href="#cb30-2" tabindex="-1"></a>  <span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb30-3"><a href="#cb30-3" tabindex="-1"></a>  <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb30-4"><a href="#cb30-4" tabindex="-1"></a>  <span class="at">y =</span> sample_data<span class="sc">$</span>y,</span>
+<span id="cb30-5"><a href="#cb30-5" tabindex="-1"></a>  <span class="at">k =</span> <span class="dv">5</span>,</span>
+<span id="cb30-6"><a href="#cb30-6" tabindex="-1"></a>  <span class="at">mstop_grid =</span> <span class="fu">c</span>(<span class="dv">50</span>, <span class="dv">100</span>, <span class="dv">200</span>),</span>
+<span id="cb30-7"><a href="#cb30-7" tabindex="-1"></a>  <span class="at">nu_mu_grid =</span> <span class="fu">c</span>(<span class="fl">0.01</span>, <span class="fl">0.05</span>, <span class="fl">0.1</span>),</span>
+<span id="cb30-8"><a href="#cb30-8" tabindex="-1"></a>  <span class="at">nu_sigma_grid =</span> <span class="fu">c</span>(<span class="fl">0.01</span>, <span class="fl">0.05</span>, <span class="fl">0.1</span>),</span>
+<span id="cb30-9"><a href="#cb30-9" tabindex="-1"></a>  <span class="at">seed =</span> <span class="dv">27092001</span></span>
+<span id="cb30-10"><a href="#cb30-10" tabindex="-1"></a>)</span></code></pre></div>
+<p>The resulting object can be inspected with:</p>
+<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb31-1"><a href="#cb31-1" tabindex="-1"></a>grid_fit</span>
+<span id="cb31-2"><a href="#cb31-2" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb31-3"><a href="#cb31-3" tabindex="-1"></a><span class="er">&gt;</span> Call<span class="sc">:</span></span>
+<span id="cb31-4"><a href="#cb31-4" tabindex="-1"></a><span class="er">&gt;</span> <span class="fu">cv_boost_grid</span>(<span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>], <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>], <span class="at">y =</span> sample_data<span class="sc">$</span>y, </span>
+<span id="cb31-5"><a href="#cb31-5" tabindex="-1"></a><span class="sc">&gt;</span>     <span class="at">k =</span> <span class="dv">5</span>, <span class="at">mstop_grid =</span> <span class="fu">c</span>(<span class="dv">50</span>, <span class="dv">100</span>, <span class="dv">200</span>), <span class="at">nu_mu_grid =</span> <span class="fu">c</span>(<span class="fl">0.01</span>, </span>
+<span id="cb31-6"><a href="#cb31-6" tabindex="-1"></a><span class="sc">&gt;</span>         <span class="fl">0.05</span>, <span class="fl">0.1</span>), <span class="at">nu_sigma_grid =</span> <span class="fu">c</span>(<span class="fl">0.01</span>, <span class="fl">0.05</span>, <span class="fl">0.1</span>), <span class="at">seed =</span> <span class="dv">27092001</span>)</span>
+<span id="cb31-7"><a href="#cb31-7" tabindex="-1"></a><span class="sc">&gt;</span> </span>
+<span id="cb31-8"><a href="#cb31-8" tabindex="-1"></a><span class="er">&gt;</span> Best combination<span class="sc">:</span></span>
+<span id="cb31-9"><a href="#cb31-9" tabindex="-1"></a><span class="er">&gt;</span>    mstop nu_mu nu_sigma learner  cv_error optimal_stop</span>
+<span id="cb31-10"><a href="#cb31-10" tabindex="-1"></a><span class="sc">&gt;</span> <span class="dv">27</span>   <span class="dv">200</span>   <span class="fl">0.1</span>      <span class="fl">0.1</span>  linear <span class="fl">0.4641155</span>          <span class="dv">200</span></span></code></pre></div>
+<p>The grid search evaluates the Cartesian product of the supplied
+candidate hyperparameters. Consequently, the computational cost can
+increase substantially when many candidate values are supplied.</p>
+<p>For practical applications, it is therefore advisable to first choose
+a reasonable range of learning rates and then use cross-validation to
+identify a suitable combination.</p>
+</div>
+<div id="choosing-a-model-configuration" class="section level1">
+<h1>Choosing a Model Configuration</h1>
+<p>The main modeling choices can be summarized as follows.</p>
+<table>
+<colgroup>
+<col width="62%" />
+<col width="37%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Goal</th>
+<th>Recommended configuration</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Approximately linear effects</td>
+<td><code>learner = &quot;linear&quot;</code></td>
+</tr>
+<tr class="even">
+<td>Nonlinear effects expected</td>
+<td><code>learner = &quot;spline&quot;</code></td>
+</tr>
+<tr class="odd">
+<td>Functional form unknown</td>
+<td><code>learner = &quot;auto&quot;</code></td>
+</tr>
+<tr class="even">
+<td>Standard distributional boosting</td>
+<td><code>method = &quot;cyclic&quot;</code></td>
+</tr>
+<tr class="odd">
+<td>Select one best parameter update at a time</td>
+<td><code>method = &quot;noncyclic&quot;</code></td>
+</tr>
+<tr class="even">
+<td>Fast automatic stopping</td>
+<td><code>patience</code></td>
+</tr>
+<tr class="odd">
+<td>More robust stopping selection</td>
+<td><code>cv_boost_gaussian()</code></td>
+</tr>
+<tr class="even">
+<td>Tune several hyperparameters</td>
+<td><code>cv_boost_grid()</code></td>
+</tr>
+</tbody>
+</table>
+<p>For most applications, a sensible starting point is a cyclic model
+with a relatively small learning rate and cross-validation-based
+stopping.</p>
+<p>For example:</p>
+<div class="sourceCode" id="cb32"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb32-1"><a href="#cb32-1" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">cv_boost_gaussian</span>(</span>
+<span id="cb32-2"><a href="#cb32-2" tabindex="-1"></a>  <span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb32-3"><a href="#cb32-3" tabindex="-1"></a>  <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb32-4"><a href="#cb32-4" tabindex="-1"></a>  <span class="at">y =</span> y,</span>
+<span id="cb32-5"><a href="#cb32-5" tabindex="-1"></a>  <span class="at">k =</span> <span class="dv">5</span>,</span>
+<span id="cb32-6"><a href="#cb32-6" tabindex="-1"></a>  <span class="at">mstop =</span> <span class="dv">500</span>,</span>
+<span id="cb32-7"><a href="#cb32-7" tabindex="-1"></a>  <span class="at">nu_mu =</span> <span class="fl">0.05</span>,</span>
+<span id="cb32-8"><a href="#cb32-8" tabindex="-1"></a>  <span class="at">nu_sigma =</span> <span class="fl">0.05</span>,</span>
+<span id="cb32-9"><a href="#cb32-9" tabindex="-1"></a>  <span class="at">method =</span> <span class="st">&quot;cyclic&quot;</span>,</span>
+<span id="cb32-10"><a href="#cb32-10" tabindex="-1"></a>  <span class="at">learner =</span> <span class="st">&quot;linear&quot;</span>,</span>
+<span id="cb32-11"><a href="#cb32-11" tabindex="-1"></a>  <span class="at">seed =</span> <span class="dv">123</span></span>
+<span id="cb32-12"><a href="#cb32-12" tabindex="-1"></a>)</span></code></pre></div>
+<p>If nonlinear effects are plausible, replacing
+<code>learner = &quot;linear&quot;</code> by <code>learner = &quot;spline&quot;</code> is a
+natural extension.</p>
+</div>
+<div id="reproducibility" class="section level1">
+<h1>Reproducibility</h1>
+<p>Functions involving random resampling accept an explicit
+<code>seed</code> argument. Providing a seed makes the fold assignment
+or validation split reproducible on the same R and package versions.</p>
+<p>For example:</p>
+<div class="sourceCode" id="cb33"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb33-1"><a href="#cb33-1" tabindex="-1"></a>cv_fit <span class="ot">&lt;-</span> <span class="fu">cv_boost_gaussian</span>(</span>
+<span id="cb33-2"><a href="#cb33-2" tabindex="-1"></a>  <span class="at">X =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb33-3"><a href="#cb33-3" tabindex="-1"></a>  <span class="at">Z =</span> sample_data[, <span class="sc">-</span><span class="dv">1</span>],</span>
+<span id="cb33-4"><a href="#cb33-4" tabindex="-1"></a>  <span class="at">y =</span> y,</span>
+<span id="cb33-5"><a href="#cb33-5" tabindex="-1"></a>  <span class="at">k =</span> <span class="dv">5</span>,</span>
+<span id="cb33-6"><a href="#cb33-6" tabindex="-1"></a>  <span class="at">mstop =</span> <span class="dv">500</span>,</span>
+<span id="cb33-7"><a href="#cb33-7" tabindex="-1"></a>  <span class="at">nu_mu =</span> <span class="fl">0.05</span>,</span>
+<span id="cb33-8"><a href="#cb33-8" tabindex="-1"></a>  <span class="at">nu_sigma =</span> <span class="fl">0.05</span>,</span>
+<span id="cb33-9"><a href="#cb33-9" tabindex="-1"></a>  <span class="at">seed =</span> <span class="dv">27092001</span></span>
+<span id="cb33-10"><a href="#cb33-10" tabindex="-1"></a>)</span></code></pre></div>
+<p>For fully reproducible analyses, the R version and package version
+should also be recorded.</p>
+</div>
+<div id="summary" class="section level1">
+<h1>Summary</h1>
+<p>This vignette demonstrated the main workflow for Gaussian
+component-wise boosting with <code>asp26boost</code>.</p>
+<p>The key steps are:</p>
+<ol style="list-style-type: decimal">
+<li>construct predictor matrices for the location and scale
+submodels;</li>
+<li>fit a Gaussian location-scale boosting model with
+<code>boost_gaussian()</code>;</li>
+<li>choose between linear and spline base learners;</li>
+<li>choose a cyclic or noncyclic update schedule;</li>
+<li>inspect coefficient paths and variable-selection frequencies;</li>
+<li>control model complexity through early stopping;</li>
+<li>use cross-validation to select the stopping iteration; and</li>
+<li>optionally use <code>cv_boost_grid()</code> to tune several
+hyperparameters.</li>
+</ol>
+<p>The central feature of the approach is that the conditional
+distribution is modeled jointly. Both the location and scale can depend
+on covariates, while component-wise updates and early stopping provide
+regularization and implicit variable selection.</p>
+<p>For applications with many candidate predictors, this combination
+makes component-wise boosting particularly attractive: the algorithm can
+construct sparse distributional models without requiring an
+unregularized estimation of all coefficients simultaneously.</p>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
