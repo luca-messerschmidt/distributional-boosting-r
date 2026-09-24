@@ -110,7 +110,7 @@ with the complete commit history retained to preserve authorship.
 Luca Messerschmidt's contributions included work on the Gaussian
 location-scale implementation and its model methods, the generalized boosting
 engine and family abstraction, Gamma, Poisson, and Binomial response families,
-P-spline base learners, cross-validation, automated tests, and package
+P-spline base learners, automated tests and package
 documentation.
 
 ## License
