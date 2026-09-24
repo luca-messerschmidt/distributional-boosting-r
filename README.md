@@ -1,5 +1,7 @@
 # asp26boost
 
+[![R-CMD-check](https://github.com/luca-messerschmidt/distributional-boosting-r/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/luca-messerschmidt/distributional-boosting-r/actions/workflows/R-CMD-check.yaml)
+
 Component-wise gradient boosting for distributional regression in R, in the
 spirit of `mboost`/`gamboostLSS`. Every distribution parameter (e.g. mean and
 standard deviation) is boosted on its own linear predictor, one base learner
