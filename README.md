@@ -28,7 +28,7 @@ This package is not on CRAN. Install it directly from this repository:
 
 ```r
 # install.packages("remotes")
-remotes::install_git("https://gitlab.gwdg.de/bjarne.herbst01/asp26boost.git")
+remotes::install_github("luca-messerschmidt/distributional-boosting-r")
 ```
 
 Or, if you already have the repository cloned locally:
@@ -88,6 +88,30 @@ walkthrough, and `?boost_gaussian`, `?boost_gamma`, `?boost_poisson`,
 ```r
 devtools::test()
 ```
+
+## Project report
+
+The accompanying term paper describes the statistical background, package
+architecture, and simulation study in detail:
+
+- [Component-wise Gradient Boosting for Distributional Regression in R](docs/component-wise-gradient-boosting-report.pdf)
+
+The public copy omits access credentials for supporting material and the
+signed declaration of originality.
+
+## Project background
+
+This package was developed collaboratively in 2026 for the Advanced
+Statistical Programming with R course at the University of Göttingen. This
+GitHub repository is a portfolio mirror of the
+[original GWDG GitLab project](https://gitlab.gwdg.de/bjarne.herbst01/asp26boost),
+with the complete commit history retained to preserve authorship.
+
+Luca Messerschmidt's contributions included work on the Gaussian
+location-scale implementation and its model methods, the generalized boosting
+engine and family abstraction, Gamma, Poisson, and Binomial response families,
+P-spline base learners, cross-validation, automated tests, and package
+documentation.
 
 ## License
 

@@ -14,5 +14,5 @@ bibentry(
   ),
   year     = year,
   note     = sprintf("R package version %s", vers),
-  url      = "https://gitlab.gwdg.de/bjarne.herbst01/asp26boost"
+  url      = "https://github.com/luca-messerschmidt/distributional-boosting-r"
 )

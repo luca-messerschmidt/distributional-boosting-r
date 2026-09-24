@@ -25,8 +25,9 @@ Description: Implements a component-wise gradient boosting algorithm for
     plotting, printing, and summary methods.
 License: MIT + file LICENSE
 Encoding: UTF-8
-URL: https://gitlab.gwdg.de/bjarne.herbst01/asp26boost
-BugReports: https://gitlab.gwdg.de/bjarne.herbst01/asp26boost/-/issues
+URL: https://github.com/luca-messerschmidt/distributional-boosting-r,
+    https://gitlab.gwdg.de/bjarne.herbst01/asp26boost
+BugReports: https://github.com/luca-messerschmidt/distributional-boosting-r/issues
 RoxygenNote: 7.3.3
 Imports:
     stats,
